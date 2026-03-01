@@ -6,3 +6,4 @@
 需要从B2得到以下信息
 ApiID，ApplicationKey，存储桶名称（两个，一个云盘一个图床）
 然后执行install.bat即可
+国内用户无法下载B2.exe的话请访问Backblaze官网下载 https://www.backblaze.com/docs/cloud-storage-command-line-tools
