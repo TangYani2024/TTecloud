@@ -1,3 +1,58 @@
+const ICONS = {
+  folder: `<svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none">
+    <path d="M4 20h16a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1h-7l-2-3H5a1 1 0 0 0-1 1v15a1 1 0 0 0 1 1Z" fill="#FFB347" fill-opacity="0.18" stroke="#FFB347" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M3 8h18v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8Z" fill="#FFD966" fill-opacity="0.22" stroke="#FFD966" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M3 8h18" stroke="#FFE499" stroke-width="0.8" stroke-opacity="0.5" stroke-linecap="round"/>
+  </svg>`,
+
+  folderLocked: `<svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none">
+    <path d="M4 20h16a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1h-7l-2-3H5a1 1 0 0 0-1 1v15a1 1 0 0 0 1 1Z" fill="#C780E8" fill-opacity="0.15" stroke="#C780E8" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M3 8h18v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8Z" fill="#E0A9F5" fill-opacity="0.18" stroke="#E0A9F5" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="9" y="13" width="6" height="5" rx="1" fill="#2C1B4E" fill-opacity="0.5" stroke="#A070D0" stroke-width="1" stroke-linecap="round"/>
+    <path d="M12 13v-1.5a1.5 1.5 0 0 0-3 0V13" stroke="#A070D0" stroke-width="1.1" fill="none" stroke-linecap="round"/>
+    <circle cx="12" cy="15.5" r="0.8" fill="#FFE499" fill-opacity="0.8" stroke="none"/>
+  </svg>`,
+
+  archive: `<svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none">
+    <path d="M4 20h16a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1h-7l-2-3H5a1 1 0 0 0-1 1v15a1 1 0 0 0 1 1Z" fill="#4ECDC4" fill-opacity="0.15" stroke="#4ECDC4" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M3 8h18v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8Z" fill="#A8E6E0" fill-opacity="0.18" stroke="#A8E6E0" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M12 6v12" stroke="#4ECDC4" stroke-width="1.4" stroke-dasharray="1.8 2.2" stroke-opacity="0.7" stroke-linecap="round"/>
+    <rect x="11" y="9" width="2" height="2" rx="0.5" fill="#4ECDC4" fill-opacity="0.5" stroke="none"/>
+    <rect x="11" y="13" width="2" height="2" rx="0.5" fill="#4ECDC4" fill-opacity="0.5" stroke="none"/>
+  </svg>`,
+
+  video: `<svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none">
+    <rect x="2" y="6" width="20" height="12" rx="2.5" fill="#1E3A5F" fill-opacity="0.35" stroke="#4A9EFF" stroke-width="1.2" stroke-linecap="round"/>
+    <rect x="5" y="9" width="3" height="6" rx="0.8" fill="#4A9EFF" fill-opacity="0.2" stroke="none"/>
+    <rect x="16" y="9" width="3" height="6" rx="0.8" fill="#4A9EFF" fill-opacity="0.2" stroke="none"/>
+    <circle cx="12" cy="12" r="2.8" fill="#FF6B9D" fill-opacity="0.35" stroke="#FF6B9D" stroke-width="1" stroke-linecap="round"/>
+    <path d="M11 10.8v2.4l2-1.2-2-1.2Z" fill="#FFB3D1" fill-opacity="0.7" stroke="none"/>
+  </svg>`,
+
+  audio: `<svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none">
+    <circle cx="8" cy="17" r="3.2" fill="#C445B5" fill-opacity="0.2" stroke="#C445B5" stroke-width="1.2" stroke-linecap="round"/>
+    <circle cx="18" cy="15" r="3.2" fill="#C445B5" fill-opacity="0.2" stroke="#C445B5" stroke-width="1.2" stroke-linecap="round"/>
+    <path d="M11 17V6l9-2v11" stroke="#C445B5" stroke-width="1.3" fill="none" stroke-opacity="0.7" stroke-linecap="round"/>
+    <path d="M11 11l9-2" stroke="#C445B5" stroke-width="1.1" fill="none" stroke-opacity="0.5" stroke-linecap="round"/>
+    <circle cx="8" cy="17" r="1" fill="#FFE066" fill-opacity="0.6" stroke="none"/>
+    <circle cx="18" cy="15" r="1" fill="#FFE066" fill-opacity="0.6" stroke="none"/>
+  </svg>`,
+
+  document: `<svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none">
+    <path d="M6 3h8l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" fill="#E0ECFF" fill-opacity="0.15" stroke="#8AB8E8" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M14 3v5h5" fill="none" stroke="#8AB8E8" stroke-width="1.2" stroke-opacity="0.7" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M9 13h6M9 17h4" stroke="#8AB8E8" stroke-width="1.1" stroke-linecap="round" stroke-opacity="0.5"/>
+  </svg>`,
+
+  code: `<svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none">
+    <path d="M6 3h8l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" fill="#1E2A3A" fill-opacity="0.4" stroke="#61DAFB" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M14 3v5h5" fill="none" stroke="#61DAFB" stroke-width="1.2" stroke-opacity="0.6" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M10.5 13.5L8.5 16l2 2.5" stroke="#61DAFB" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="0.9"/>
+    <path d="M13.5 13.5l2 2.5-2 2.5" stroke="#61DAFB" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="0.9"/>
+    <circle cx="12" cy="9" r="1" fill="#F0DB4F" fill-opacity="0.6" stroke="none"/>
+  </svg>`
+};
+
 const app = {
   state: {
     view: 'resource',
@@ -285,6 +340,23 @@ const app = {
     } catch (e) {}
   },
 
+  getFileIconSvg(fileName) {
+    const ext = (fileName.split('.').pop() || '').toLowerCase();
+    if (['zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz', 'iso', 'apk', 'ipa', 'pkg', 'dmg'].includes(ext)) {
+      return ICONS.archive;
+    }
+    if (['mp4', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'webm', 'm4v', 'rmvb', 'ts', '3gp'].includes(ext)) {
+      return ICONS.video;
+    }
+    if (['mp3', 'flac', 'wav', 'aac', 'ogg', 'm4a', 'wma', 'ape', 'mid'].includes(ext)) {
+      return ICONS.audio;
+    }
+    if (['js', 'ts', 'jsx', 'tsx', 'html', 'htm', 'css', 'json', 'py', 'java', 'c', 'cpp', 'cs', 'go', 'rs', 'php', 'sh', 'sql', 'yaml', 'yml', 'xml', 'vue'].includes(ext)) {
+      return ICONS.code;
+    }
+    return ICONS.document;
+  },
+
   renderFolders(arr) {
     const a = document.getElementById('dynamic-area');
     if (!arr.length) {
@@ -294,10 +366,12 @@ const app = {
     let h = '<div class="grid-view">';
     arr.forEach(f => {
       const sn = this.escapeHTML(f.name);
+      const isLocked = f.locked === 'true' || f.locked === '1' || f.locked === true || f.locked === 1;
+      const iconSvg = isLocked ? ICONS.folderLocked : ICONS.folder;
       h += '<div class="folder-card" data-f="' + sn + '" data-l="' + f.locked + '" onclick="app.goToFolder(this.dataset.f, this.dataset.l===\'true\'||this.dataset.l===\'1\')">' +
-           '<div><div style="font-size:45px;margin-bottom:10px">' + (f.locked ? '🗃️' : '📁') + '</div>' +
-           '<div style="font-weight:bold;font-size:14px;word-break:break-all;line-height:1.3">' + sn + '</div></div>' +
-           '<div><div style="color:gray;font-size:11px;margin-top:8px">' + f.count + ' 项 | ' + this.formatBytes(f.size) + '</div>';
+           '<div><div class="folder-preview">' + iconSvg + '</div>' +
+           '<div class="file-name" title="' + sn + '">' + sn + '</div></div>' +
+           '<div><div class="file-meta" style="margin-top:8px">' + f.count + ' 项 | ' + this.formatBytes(f.size) + '</div>';
       if (this.state.isAdmin) {
         h += '<div style="margin-top:12px"><button class="btn btn-sm btn-outline" style="width:100%" data-f="' + sn + '" onclick="event.stopPropagation();app.adminFolder(this.dataset.f)">🔐 权限</button></div>';
       }
@@ -358,9 +432,9 @@ const app = {
     let h = '<div class="grid-view">';
     arr.forEach(f => {
       const sn = this.escapeHTML(f.name),
-            ext = f.name.split('.').pop().toLowerCase(),
+            ext = (f.name.split('.').pop() || '').toLowerCase(),
             sp = (this.state.view === 'image' || ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'ico'].includes(ext)),
-            ph = sp ? '<img src="/file/' + f.id + '" loading="lazy">' : '📄',
+            ph = sp ? '<img src="/file/' + f.id + '" loading="lazy">' : this.getFileIconSvg(f.name),
             hb = f.is_hidden ? '<div style="position:absolute;top:6px;right:6px;font-size:10px;background:rgba(239,68,68,0.8);color:#fff;padding:2px 6px;border-radius:6px;font-weight:bold;box-shadow:0 2px 5px rgba(0,0,0,0.2)">隐藏</div>' : '';
       h += '<div class="file-card" data-id="' + f.id + '" onclick="app.showFileAction(this.dataset.id)" ' + (f.is_hidden ? 'style="opacity:0.6"' : '') + '>' +
            hb +
@@ -376,10 +450,10 @@ const app = {
     if (!f) return;
     history.pushState({ mdl: id }, '');
     const sn = this.escapeHTML(f.name),
-          ext = f.name.split('.').pop().toLowerCase(),
+          ext = (f.name.split('.').pop() || '').toLowerCase(),
           iv = this.state.view === 'image',
           sp = (iv || ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'ico'].includes(ext)),
-          pr = sp ? '<img src="/file/' + f.id + '" style="width:120px;height:120px;object-fit:cover;border-radius:14px;margin:0 auto;display:block;box-shadow:0 8px 20px rgba(0,0,0,0.15);border:1px solid var(--cd)">' : '<div style="font-size:70px;text-align:center;margin:10px 0;text-shadow:0 4px 10px rgba(0,0,0,0.1)">📄</div>',
+          pr = sp ? '<img src="/file/' + f.id + '" style="width:120px;height:120px;object-fit:cover;border-radius:14px;margin:0 auto;display:block;box-shadow:0 8px 20px rgba(0,0,0,0.15);border:1px solid var(--cd)">' : '<div style="width:84px;height:84px;margin:10px auto;display:flex;align-items:center;justify-content:center;">' + this.getFileIconSvg(f.name) + '</div>',
           pq = this.state.currentPwd ? '&pwd=' + encodeURIComponent(this.state.currentPwd) : '',
           ps = this.state.currentPwd ? '?pwd=' + encodeURIComponent(this.state.currentPwd) : '';
     
