@@ -554,9 +554,11 @@ const app = {
     }
     const m = document.getElementById(id);
     if (m) {
-      document.body.classList.remove('modal-open');
+      if (!document.querySelector('.modal-overlay:not(#' + id + ')')) {
+        document.body.classList.remove('modal-open');
+      }
       const mc = m.querySelector('.modal-content');
-      mc.animate([{ transform: 'scale(1) translateY(0)', opacity: 1 }, { transform: 'scale(0.95) translateY(15px)', opacity: 0 }], { duration: 200, easing: 'ease-in', fill: 'forwards' });
+      if (mc) mc.animate([{ transform: 'scale(1) translateY(0)', opacity: 1 }, { transform: 'scale(0.95) translateY(15px)', opacity: 0 }], { duration: 200, easing: 'ease-in', fill: 'forwards' });
       const a = m.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 200, fill: 'forwards' });
       if (!p) history.back();
       a.onfinish = () => m.remove();
@@ -575,7 +577,10 @@ const app = {
     const SIZE_20MB = 20 * 1024 * 1024;
     const SIZE_500MB = 500 * 1024 * 1024;
 
-    // 1. 小于 20MB：无需分片，直接下载
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+                     (navigator.maxTouchPoints > 1 && /Macintosh/i.test(navigator.userAgent));
+
+    // 1. 小于 20MB：无需分片，直接原生下载
     if (fileSize < SIZE_20MB) {
       const a = document.createElement('a');
       a.href = dlUrl;
@@ -587,19 +592,18 @@ const app = {
       return;
     }
 
-    // 2. 20MB ~ 500MB：多线程并发分片下载至内存 Blob (就地卡片进度条)
+    // 2. 20MB ~ 500MB：10 线程并发分片下载至内存 Blob (就地卡片进度条)
     if (fileSize >= SIZE_20MB && fileSize <= SIZE_500MB) {
       return this.startMemoryChunkDownload(f, dlUrl);
     }
 
-    // 3. 大于 500MB：检测 File System Access API
+    // 3. 大于 500MB：仅在非移动端且具备 File System Access API 时使用流式直写
     if (fileSize > SIZE_500MB) {
-      if (typeof window.showSaveFilePicker === 'function') {
+      if (!isMobile && typeof window.showSaveFilePicker === 'function') {
         return this.startFileSystemStreamDownload(f, dlUrl);
       } else {
-        // 不支持 File System Access API：自动复制直链，并就地卡片展示第三方多线程工具指引
-        this.copyText(dlUrl);
-        return this.showThirdPartyCard(f, dlUrl);
+        // 移动端或不支持设备：直接弹出超大文件下载指引弹窗
+        return this.showThirdPartyModal(f, dlUrl);
       }
     }
   },
@@ -614,15 +618,16 @@ const app = {
       '<div style="width:100%;padding:14px;background:rgba(0,0,0,.03);border-radius:12px;border:1px inset var(--cd);text-align:left">' +
         '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">' +
           '<span id="dl-status" style="color:var(--primary);font-weight:700;font-size:13px;display:flex;align-items:center;gap:6px">' +
-            '<img class="om-emoji" src="/openmoji/26A1.svg" alt="⚡"> 4 线程并发准备中...' +
+            '<img class="om-emoji" src="/openmoji/26A1.svg" alt="⚡"> 10 线程并发准备中...' +
           '</span>' +
-          '<span id="dl-speed" style="color:#10b981;font-weight:700;font-size:13px">0.0 MB/s</span>' +
+          '<span class="dl-stat-badge">10 线程并发</span>' +
         '</div>' +
         '<div class="progress-container" style="height:12px;margin:0 0 6px">' +
           '<div id="dl-bar" class="progress-bar" style="width:0%"></div>' +
         '</div>' +
         '<div style="display:flex;justify-content:space-between;font-size:11px;color:gray">' +
           '<span id="dl-bytes">0 B / ' + this.formatBytes(fileSize) + '</span>' +
+          '<span id="dl-speed" style="color:#10b981;font-weight:700">0.0 MB/s</span>' +
           '<span id="dl-pct" style="font-weight:700">0%</span>' +
         '</div>' +
         '<div id="dl-actions" style="display:flex;gap:10px;margin-top:12px">' +
@@ -630,7 +635,7 @@ const app = {
         '</div>' +
       '</div>';
 
-    const threadCount = 4;
+    const threadCount = 10;
     const chunkSize = Math.ceil(fileSize / threadCount);
     const chunks = new Array(threadCount);
     let downloadedBytes = 0;
@@ -648,7 +653,7 @@ const app = {
       const by = document.getElementById('dl-bytes');
       const pc = document.getElementById('dl-pct');
       if (bar) bar.style.width = pct + '%';
-      if (st) st.innerHTML = '<img class="om-emoji" src="/openmoji/26A1.svg" alt="⚡"> ' + (pct >= 100 ? '拼装 Blob 中...' : '多线程接收中...');
+      if (st) st.innerHTML = '<img class="om-emoji" src="/openmoji/26A1.svg" alt="⚡"> ' + (pct >= 100 ? '拼装 10 分片 Blob 中...' : '10 线程疾速接收中...');
       if (sp) sp.innerText = speed + ' MB/s';
       if (by) by.innerText = this.formatBytes(downloadedBytes) + ' / ' + this.formatBytes(fileSize);
       if (pc) pc.innerText = pct + '%';
@@ -736,25 +741,25 @@ const app = {
       handle = await window.showSaveFilePicker({ suggestedName: fileName });
     } catch (e) {
       if (e.name === 'AbortError') return;
-      alert('无法打开保存文件选择器: ' + e.message);
-      return;
+      console.warn('showSaveFilePicker 异常，自动切换为第三方加速指引弹窗:', e);
+      return this.showThirdPartyModal(f, dlUrl);
     }
 
     let writable;
     try {
       writable = await handle.createWritable();
     } catch (e) {
-      alert('无法创建硬盘写入流: ' + e.message);
-      return;
+      console.warn('createWritable 异常，自动切换为第三方加速指引弹窗:', e);
+      return this.showThirdPartyModal(f, dlUrl);
     }
 
     c.innerHTML = 
       '<div style="width:100%;padding:14px;background:rgba(0,0,0,.03);border-radius:12px;border:1px inset var(--cd);text-align:left">' +
         '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">' +
           '<span id="dl-status" style="color:var(--primary);font-weight:700;font-size:13px;display:flex;align-items:center;gap:6px">' +
-            '<img class="om-emoji" src="/openmoji/26A1.svg" alt="⚡"> 磁盘直写准备中...' +
+            '<img class="om-emoji" src="/openmoji/26A1.svg" alt="⚡"> 10 线程磁盘直写准备中...' +
           '</span>' +
-          '<span class="dl-stat-badge">零内存</span>' +
+          '<span class="dl-stat-badge">10 线程直写</span>' +
         '</div>' +
         '<div class="progress-container" style="height:12px;margin:0 0 6px">' +
           '<div id="dl-bar" class="progress-bar" style="width:0%"></div>' +
@@ -769,7 +774,7 @@ const app = {
         '</div>' +
       '</div>';
 
-    const threadCount = 4;
+    const threadCount = 10;
     const chunkSize = Math.ceil(fileSize / threadCount);
     let downloadedBytes = 0;
     const startTime = Date.now();
@@ -792,7 +797,7 @@ const app = {
       const by = document.getElementById('dl-bytes');
       const pc = document.getElementById('dl-pct');
       if (bar) bar.style.width = pct + '%';
-      if (st) st.innerHTML = '<img class="om-emoji" src="/openmoji/26A1.svg" alt="⚡"> ' + (pct >= 100 ? '正在刷盘固化...' : '流式直写磁盘中...');
+      if (st) st.innerHTML = '<img class="om-emoji" src="/openmoji/26A1.svg" alt="⚡"> ' + (pct >= 100 ? '正在刷盘固化...' : '10 线程流式直写磁盘中...');
       if (sp) sp.innerText = speed + ' MB/s';
       if (by) by.innerText = this.formatBytes(downloadedBytes) + ' / ' + this.formatBytes(fileSize);
       if (pc) pc.innerText = pct + '%';
@@ -844,7 +849,7 @@ const app = {
       } else {
         const st = document.getElementById('dl-status');
         if (st) {
-          st.innerHTML = '<img class="om-emoji" src="/openmoji/26A0.svg" alt="⚠️"> 直写失败，已转原生下载';
+          st.innerHTML = '<img class="om-emoji" src="/openmoji/26A0.svg" alt="⚠️"> 直写失败，转原生下载';
           st.style.color = '#ef4444';
         }
         const act = document.getElementById('dl-actions');
@@ -869,40 +874,57 @@ const app = {
     }
   },
 
-  showThirdPartyCard(f, dlUrl) {
-    const c = document.getElementById('file-action-container');
-    if (!c) return;
+  showThirdPartyModal(f, dlUrl) {
+    try {
+      this.copyText(dlUrl);
+    } catch (e) {}
+
+    const oldM = document.getElementById('tpM');
+    if (oldM) oldM.remove();
+
+    const sn = this.escapeHTML(f.name);
     const fSizeStr = this.formatBytes(f.size);
-    c.innerHTML = 
-      '<div style="width:100%;padding:14px;background:rgba(0,0,0,.03);border-radius:12px;border:1px inset var(--cd);text-align:left">' +
-        '<div style="text-align:center;margin-bottom:10px">' +
-          '<h4 style="margin:0;font-size:15px;display:flex;align-items:center;justify-content:center;gap:6px">' +
-            '<img class="om-emoji om-emoji-lg" src="/openmoji/1F680.svg" alt="🚀"> 超大文件加速下载指引' +
-          '</h4>' +
-          '<p style="color:gray;font-size:12px;margin:6px 0 0">当前文件大小为 <b style="color:var(--primary)">' + fSizeStr + '</b>（大于 500MB）</p>' +
-        '</div>' +
-        '<div style="background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.25);padding:10px 12px;border-radius:10px;margin-bottom:10px;font-size:12px;color:#065f46;display:flex;align-items:center;gap:8px">' +
+
+    const m = document.createElement('div');
+    m.className = 'modal-overlay';
+    m.id = 'tpM';
+    m.style.zIndex = '2000';
+    m.style.opacity = '0';
+    m.innerHTML = 
+      '<div class="modal-content" style="opacity:0;transform:scale(0.95) translateY(15px);max-width:400px;text-align:center">' +
+        '<div style="font-size:42px;margin:5px auto 0"><img class="om-emoji om-emoji-lg" src="/openmoji/1F680.svg" alt="🚀"></div>' +
+        '<h3 style="margin:8px 0 4px;font-size:17px">超大文件加速下载指引</h3>' +
+        '<p style="color:gray;font-size:12px;margin:0 0 12px;word-break:break-all">' +
+          '文件：<b style="color:var(--tx)">' + sn + '</b><br>' +
+          '大小：<b style="color:var(--primary)">' + fSizeStr + '</b>（大于 500MB）' +
+        '</p>' +
+        '<div style="background:rgba(16,185,129,0.12);border:1px solid rgba(16,185,129,0.3);padding:10px 12px;border-radius:12px;margin-bottom:12px;font-size:12px;color:#065f46;display:flex;align-items:center;justify-content:center;gap:6px">' +
           '<img class="om-emoji" src="/openmoji/2705.svg" alt="✅">' +
           '<span><b>已自动将高速直链复制到剪贴板！</b></span>' +
         '</div>' +
-        '<p style="font-size:12px;color:gray;margin:0 0 10px;line-height:1.5">' +
-          '当前浏览器环境暂不支持本地磁盘流式直写，直接读入内存会导致网页闪退。强烈建议粘贴剪贴板直链至专业多线程工具下载：' +
-        '</p>' +
-        '<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px;font-size:12px">' +
-          '<div class="app-badge-item">💻 <b>Windows / Mac</b>: IDM / Motrix / FDM / 迅雷</div>' +
-          '<div class="app-badge-item">📱 <b>手机端 (iOS / Android)</b>: IDM+ / 迅雷 / 闪电下载</div>' +
+        '<div style="text-align:left;background:rgba(0,0,0,0.03);border:1px solid var(--cd);padding:10px 12px;border-radius:12px;margin-bottom:14px;font-size:12px;line-height:1.5">' +
+          '<p style="color:gray;margin:0 0 8px">当前设备/浏览器不支持磁盘流式直写，直接内存下载极易导致网页闪退崩溃。强烈建议粘贴直链至专业工具满速下载：</p>' +
+          '<div style="display:flex;flex-direction:column;gap:5px">' +
+            '<div class="app-badge-item">💻 <b>电脑推荐</b>: IDM / Motrix / FDM / 迅雷</div>' +
+            '<div class="app-badge-item">📱 <b>手机推荐</b>: IDM+ / 迅雷 / 闪电下载</div>' +
+          '</div>' +
         '</div>' +
         '<div style="display:flex;flex-direction:column;gap:8px">' +
-          '<button type="button" class="btn btn-success btn-sm" style="width:100%;padding:10px" data-url="' + dlUrl + '" onclick="app.copyText(this.dataset.url);app.toast(\'已重新复制直链！\')">' +
+          '<button type="button" class="btn btn-success" style="width:100%;padding:12px" data-url="' + dlUrl + '" onclick="app.copyText(this.dataset.url);app.toast(\'已重新复制直链！\')">' +
             '<img class="om-emoji" src="/openmoji/1F4CB.svg" alt="📋"> 再次复制直链' +
           '</button>' +
-          '<a href="' + dlUrl + '" class="btn btn-outline btn-sm" target="_blank" style="text-decoration:none;padding:10px;text-align:center" onclick="app.closeModal(\'fM\')">' +
+          '<a href="' + dlUrl + '" class="btn btn-outline" target="_blank" style="text-decoration:none;padding:10px" onclick="app.closeModal(\'tpM\',1)">' +
             '<img class="om-emoji" src="/openmoji/1F4E5.svg" alt="📥"> 仍尝试浏览器原生下载' +
           '</a>' +
-          '<button type="button" class="btn btn-outline btn-sm" style="padding:8px" onclick="app.restoreFileActions(\'' + f.id + '\')">返回</button>' +
+          '<button type="button" class="btn btn-outline" style="padding:10px" onclick="app.closeModal(\'tpM\',1)">关闭</button>' +
         '</div>' +
       '</div>';
-    this.toast('<img class="om-emoji" src="/openmoji/2705.svg" alt="✅"> 超大文件直链已复制！');
+    document.body.appendChild(m);
+    document.body.classList.add('modal-open');
+    const mc = m.querySelector('.modal-content');
+    mc.style.willChange = 'transform, opacity';
+    m.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, fill: 'forwards' });
+    mc.animate([{ transform: 'scale(0.95) translateY(15px)', opacity: 0 }, { transform: 'scale(1) translateY(0)', opacity: 1 }], { duration: 350, easing: 'cubic-bezier(0.175,0.885,0.32,1.275)', fill: 'forwards' });
   },
 
   async adminAct(a, i, p) {
