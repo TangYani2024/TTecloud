@@ -438,7 +438,7 @@ const app = {
             hb = f.is_hidden ? '<div style="position:absolute;top:6px;right:6px;font-size:10px;background:rgba(239,68,68,0.8);color:#fff;padding:2px 6px;border-radius:6px;font-weight:bold;box-shadow:0 2px 5px rgba(0,0,0,0.2)">隐藏</div>' : '';
       h += '<div class="file-card" data-id="' + f.id + '" onclick="app.showFileAction(this.dataset.id)" ' + (f.is_hidden ? 'style="opacity:0.6"' : '') + '>' +
            hb +
-           '<div><div class="file-preview">' + ph + '</div><div class="file-name" title="' + sn + '">' + sn + '</div></div>' +
+           '<div><div class="' + (sp ? 'file-preview file-preview-img' : 'file-preview') + '">' + ph + '</div><div class="file-name" title="' + sn + '">' + sn + '</div></div>' +
            '<div class="file-meta">' + this.formatBytes(f.size) + '</div></div>';
     });
     h += '</div>';
