@@ -1,8 +1,8 @@
 const ICONS = {
   folder: `<svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none">
-    <path d="M4 20h16a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1h-7l-2-3H5a1 1 0 0 0-1 1v15a1 1 0 0 0 1 1Z" fill="#FFB347" fill-opacity="0.18" stroke="#FFB347" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M3 8h18v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8Z" fill="#FFD966" fill-opacity="0.22" stroke="#FFD966" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M3 8h18" stroke="#FFE499" stroke-width="0.8" stroke-opacity="0.5" stroke-linecap="round"/>
+    <path d="M4 20h16a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1h-7l-2-3H5a1 1 0 0 0-1 1v15a1 1 0 0 0 1 1Z" fill="#F59E0B" fill-opacity="0.26" stroke="#F59E0B" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M3 8h18v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8Z" fill="#FFD23F" fill-opacity="0.32" stroke="#F59E0B" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M3 8h18" stroke="#FFE57F" stroke-width="0.9" stroke-opacity="0.8" stroke-linecap="round"/>
   </svg>`,
 
   folderLocked: `<svg class="ui-svg-icon" viewBox="0 0 24 24" fill="none">
