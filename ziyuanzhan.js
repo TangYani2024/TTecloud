@@ -265,32 +265,42 @@ export default {
         if (P === '/api/data' && req.method === 'GET') {
           const viewM = U.searchParams.get('view') || 'resource';
           let bk = viewM === 'image' ? CONFIG.BUCKETS.IMAGE : CONFIG.BUCKETS.RESOURCE;
-          const tF = U.searchParams.get('folder'), q = U.searchParams.get('q') || '';
+          const hasFolder = U.searchParams.has('folder');
+          const tF = hasFolder ? U.searchParams.get('folder') : null;
+          const q = U.searchParams.get('q') || '';
           if (Date.now() - globalLastSizeCalcTime > 600000) {
             globalCachedTotalSize = (await e.DB.prepare("SELECT SUM(size) as t FROM files").first())?.t || 0;
             globalLastSizeCalcTime = Date.now();
           }
-          if (!tF && !q) {
+          if (!hasFolder && !q) {
             const { results: R } = await e.DB.prepare("SELECT f.folder, COUNT(f.id) as count, SUM(f.size) as size, m.password FROM files f LEFT JOIN folder_meta m ON f.folder = m.name WHERE f.type=? " + (iA ? '' : 'AND f.is_hidden=0') + " GROUP BY f.folder ORDER BY f.folder ASC").bind(bk).all();
             return Response.json({
               isAdmin: iA,
               totalSize: globalCachedTotalSize,
               maxSize: CONFIG.MAX_STORAGE_BYTES,
               mode: 'folders',
-              data: R.map(r => ({ name: r.folder, count: r.count, size: r.size, locked: !!r.password }))
+              data: R.map(r => ({ name: r.folder ?? '', count: r.count, size: r.size, locked: !!r.password }))
             }, { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
           }
           let qry = "SELECT f.*, m.password FROM files f LEFT JOIN folder_meta m ON f.folder = m.name WHERE f.type=? " + (iA ? '' : 'AND f.is_hidden=0'), prm = [bk];
-          if (tF) { qry += " AND f.folder=?"; prm.push(tF); }
+          if (hasFolder) {
+            if (!tF || !tF.trim()) {
+              qry += " AND (f.folder = ? OR f.folder IS NULL OR TRIM(COALESCE(f.folder, '')) = '')";
+              prm.push(tF || '');
+            } else {
+              qry += " AND f.folder=?";
+              prm.push(tF);
+            }
+          }
           if (q) { qry += " AND f.name LIKE ?"; prm.push('%' + q + '%'); }
           const { results: R } = await e.DB.prepare(qry + " ORDER BY f.upload_at DESC").bind(...prm).all();
           let fF = [];
           for (const f of R) {
             if (!iA && f.password) {
-              const lM = C.match(new RegExp('(?:^|; )lock_' + await hashSha256(f.folder) + '=([^;]*)'));
+              const lM = C.match(new RegExp('(?:^|; )lock_' + await hashSha256(f.folder || '') + '=([^;]*)'));
               if (!lM || decodeURIComponent(lM[1]) !== f.password) continue;
             }
-            fF.push({ id: f.id, name: f.name, size: f.size, folder: f.folder, is_hidden: f.is_hidden, upload_at: f.upload_at });
+            fF.push({ id: f.id, name: f.name, size: f.size, folder: f.folder || '', is_hidden: f.is_hidden, upload_at: f.upload_at });
           }
           return Response.json({
             isAdmin: iA,
@@ -304,9 +314,10 @@ export default {
 
         if (P === '/api/unlock') {
           const { folder: f, password: p } = await req.json();
-          const m = await e.DB.prepare("SELECT password FROM folder_meta WHERE name=?").bind(f).first();
+          const fName = (f === null || f === undefined) ? '' : String(f);
+          const m = await e.DB.prepare("SELECT password FROM folder_meta WHERE name=?").bind(fName).first();
           if (m && m.password === p) {
-            return Response.json({ ok: true }, { headers: { 'Set-Cookie': 'lock_' + await hashSha256(f) + '=' + encodeURIComponent(p) + '; Path=/; Secure; SameSite=Strict' } });
+            return Response.json({ ok: true }, { headers: { 'Set-Cookie': 'lock_' + await hashSha256(fName) + '=' + encodeURIComponent(p) + '; Path=/; Secure; SameSite=Strict' } });
           }
           return Response.json({ ok: false, error: '密码错误' }, { status: 401 });
         }
@@ -322,11 +333,12 @@ export default {
           const p = await req.json();
           if (['delete', 'sync_d1_ghosts', 'sync_b2_orphans', 'clean_garbled', 'sync_b2_to_d1'].includes(p.action)) globalLastSizeCalcTime = 0;
           if (p.action === 'rename') await e.DB.prepare("UPDATE files SET name=? WHERE id=?").bind(p.name, p.id).run();
-          if (p.action === 'move') await e.DB.prepare("UPDATE files SET folder=? WHERE id=?").bind(p.folder, p.id).run();
+          if (p.action === 'move') await e.DB.prepare("UPDATE files SET folder=? WHERE id=?").bind(p.folder ?? '', p.id).run();
           if (p.action === 'toggle_hide') await e.DB.prepare("UPDATE files SET is_hidden=CASE WHEN is_hidden=1 THEN 0 ELSE 1 END WHERE id=?").bind(p.id).run();
           if (p.action === 'lock_folder') {
-            if (!p.password) await e.DB.prepare("DELETE FROM folder_meta WHERE name=?").bind(p.folder).run();
-            else await e.DB.prepare("INSERT OR REPLACE INTO folder_meta (name, password) VALUES (?, ?)").bind(p.folder, p.password).run();
+            const fName = (p.folder === null || p.folder === undefined) ? '' : String(p.folder);
+            if (!p.password) await e.DB.prepare("DELETE FROM folder_meta WHERE name=?").bind(fName).run();
+            else await e.DB.prepare("INSERT OR REPLACE INTO folder_meta (name, password) VALUES (?, ?)").bind(fName, p.password).run();
           }
           if (p.action === 'delete') {
             const f = await e.DB.prepare("SELECT b2_path, type FROM files WHERE id=?").bind(p.id).first();

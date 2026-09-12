@@ -203,7 +203,7 @@ const app = {
     const h = window.location.hash.slice(1);
     const p = new URLSearchParams(h);
     this.state.view = p.get('view') || 'resource';
-    this.state.folder = p.get('folder') || null;
+    this.state.folder = p.has('folder') ? p.get('folder') : null;
     this.state.q = p.get('q') || '';
     const searchInput = document.getElementById('search-input');
     if (searchInput) searchInput.value = this.state.q;
@@ -217,7 +217,7 @@ const app = {
 
   setHash() {
     let h = 'view=' + this.state.view;
-    if (this.state.folder) h += '&folder=' + encodeURIComponent(this.state.folder);
+    if (this.state.folder !== null) h += '&folder=' + encodeURIComponent(this.state.folder);
     if (this.state.q) h += '&q=' + encodeURIComponent(this.state.q);
     window.location.hash = h;
   },
@@ -243,18 +243,20 @@ const app = {
   },
 
   goToFolder(f, l) {
+    const folderName = (f === null || f === undefined) ? '' : String(f);
     if (!this.state.isAdmin && l) {
-      const p = prompt('🔒 加密目录密码：');
+      const displayName = folderName.trim() || '空白目录';
+      const p = prompt('🔒 加密目录[' + displayName + ']密码：');
       if (!p) return;
       fetch('/api/unlock', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ folder: f, password: p })
+        body: JSON.stringify({ folder: folderName, password: p })
       })
       .then(r => r.json())
       .then(rs => {
         if (rs.ok) {
-          this.state.folder = f;
+          this.state.folder = folderName;
           this.state.currentPwd = p;
           this.setHash();
         } else {
@@ -263,7 +265,7 @@ const app = {
       });
       return;
     }
-    this.state.folder = f;
+    this.state.folder = folderName;
     this.state.currentPwd = '';
     this.setHash();
   },
@@ -283,7 +285,7 @@ const app = {
     
     try {
       let u = '/api/data?view=' + this.state.view;
-      if (this.state.folder) u += '&folder=' + encodeURIComponent(this.state.folder);
+      if (this.state.folder !== null) u += '&folder=' + encodeURIComponent(this.state.folder);
       if (this.state.q) u += '&q=' + encodeURIComponent(this.state.q);
       
       const r = await fetch(u);
@@ -303,10 +305,14 @@ const app = {
           : '<a href="/login" class="btn btn-sm btn-outline">管理登录</a>';
       }
       
+      const inFolder = this.state.folder !== null;
       document.getElementById('main-nav').style.display = rs.isAdmin ? 'flex' : 'none';
       document.getElementById('admin-panel').style.display = rs.isAdmin ? 'block' : 'none';
-      document.getElementById('btn-back').style.display = this.state.folder ? 'inline-flex' : 'none';
-      document.getElementById('breadcrumb').innerHTML = this.state.folder ? '<img class="om-emoji" src="/openmoji/1F4C2.svg" alt="📂"> ' + this.escapeHTML(this.state.folder) : '<img class="om-emoji" src="/openmoji/1F4C1.svg" alt="📁"> 根目录';
+      document.getElementById('btn-back').style.display = inFolder ? 'inline-flex' : 'none';
+      const folderDisplayName = inFolder ? (this.state.folder.trim() || '空白目录') : '根目录';
+      document.getElementById('breadcrumb').innerHTML = inFolder 
+        ? '<img class="om-emoji" src="/openmoji/1F4C2.svg" alt="📂"> ' + this.escapeHTML(folderDisplayName) 
+        : '<img class="om-emoji" src="/openmoji/1F4C1.svg" alt="📁"> 根目录';
       
       if (rs.isAdmin) {
         document.getElementById('storage-card').style.display = 'block';
@@ -330,6 +336,9 @@ const app = {
       }
       
       this.state.fileList = rs.data || [];
+      if (rs.mode === 'folders') {
+        this.state.folderList = rs.data || [];
+      }
       const renderDom = () => {
         if (rs.mode === 'folders') this.renderFolders(rs.data);
         else this.renderFiles(rs.data);
@@ -358,22 +367,25 @@ const app = {
   },
 
   renderFolders(arr) {
+    this.state.folderList = arr || [];
     const a = document.getElementById('dynamic-area');
     if (!arr.length) {
       a.innerHTML = '<p style="text-align:center;color:gray;margin-top:40px">空空如也~</p>';
       return;
     }
     let h = '<div class="grid-view">';
-    arr.forEach(f => {
-      const sn = this.escapeHTML(f.name);
+    arr.forEach((f, idx) => {
+      const rawName = (f.name === null || f.name === undefined) ? '' : String(f.name);
+      const sn = this.escapeHTML(rawName);
       const isLocked = f.locked === 'true' || f.locked === '1' || f.locked === true || f.locked === 1;
       const iconSvg = isLocked ? ICONS.folderLocked : ICONS.folder;
-      h += '<div class="folder-card" data-f="' + sn + '" data-l="' + f.locked + '" onclick="app.goToFolder(this.dataset.f, this.dataset.l===\'true\'||this.dataset.l===\'1\')">' +
+      const displayTitle = rawName.trim() ? sn : '<span style="color:gray;font-style:italic">（空白目录）</span>';
+      h += '<div class="folder-card" onclick="app.goToFolder(app.state.folderList[' + idx + '].name, ' + isLocked + ')">' +
            '<div><div class="folder-preview">' + iconSvg + '</div>' +
-           '<div class="file-name" title="' + sn + '">' + sn + '</div></div>' +
+           '<div class="file-name" title="' + (rawName.trim() || '空白目录') + '">' + displayTitle + '</div></div>' +
            '<div><div class="file-meta" style="margin-top:8px">' + f.count + ' 项 | ' + this.formatBytes(f.size) + '</div>';
       if (this.state.isAdmin) {
-        h += '<div style="margin-top:12px"><button class="btn btn-sm btn-outline" style="width:100%" data-f="' + sn + '" onclick="event.stopPropagation();app.adminFolder(this.dataset.f)"><img class="om-emoji" src="/openmoji/1F510.svg" alt="🔐"> 权限</button></div>';
+        h += '<div style="margin-top:12px"><button class="btn btn-sm btn-outline" style="width:100%" onclick="event.stopPropagation();app.adminFolder(app.state.folderList[' + idx + '].name)"><img class="om-emoji" src="/openmoji/1F510.svg" alt="🔐"> 权限</button></div>';
       }
       h += '</div></div>';
     });
@@ -950,8 +962,8 @@ const app = {
       rq.name = n;
     }
     if (a === 'move') {
-      const n = prompt('目标目录：', p);
-      if (!n || n === p) return;
+      const n = prompt('目标目录 (留空为根目录/空白目录)：', p || '');
+      if (n === null || n === p) return;
       rq.folder = n;
     }
     if (a === 'sync_d1_ghosts' && !confirm('清死链？')) return;
@@ -973,12 +985,14 @@ const app = {
   },
 
   async adminFolder(f) {
-    const p = prompt('目录[' + f + ']密码(留空清除)：');
+    const fName = (f === null || f === undefined) ? '' : String(f);
+    const displayName = fName.trim() || '空白目录';
+    const p = prompt('目录[' + displayName + ']密码(留空清除)：');
     if (p === null) return;
     await fetch('/api/admin/action', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'lock_folder', folder: f, password: p })
+      body: JSON.stringify({ action: 'lock_folder', folder: fName, password: p })
     });
     this.fetchData();
   },
