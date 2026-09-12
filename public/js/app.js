@@ -465,7 +465,7 @@ const app = {
                   pr +
                   '<h3 style="text-align:center;margin:15px 0 5px;word-break:break-all;font-size:16px;line-height:1.4">' + sn + '</h3>' +
                   '<p style="text-align:center;color:gray;font-size:12px;margin:0 0 15px">' + this.formatBytes(f.size) + '</p>' +
-                  '<div id="file-action-container" style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;width:100%">' + b + '</div>' +
+                  '<div id="file-action-container" style="display:flex;flex-direction:column;gap:10px;width:100%">' + b + '</div>' +
                   '</div>';
     document.body.appendChild(m);
     document.body.classList.add('modal-open');
@@ -490,39 +490,53 @@ const app = {
 
     let b = '';
     if (iv) {
-      b += '<div id="primary-actions" class="flex-row" style="flex-wrap:wrap;width:100%">' +
+      b += '<div id="primary-actions" style="display:flex;flex-direction:column;gap:10px;width:100%">' +
+           '<div class="flex-row" style="width:100%">' +
            '<button class="btn btn-outline flex-1" style="padding:12px" data-id="' + f.id + '" onclick="app.copyImgLink(this.dataset.id);app.closeModal(\'fM\')"><img class="om-emoji" src="/openmoji/1F517.svg" alt="🔗"> 复制直链</button>' +
            '<button class="btn btn-outline flex-1" style="padding:12px" data-id="' + f.id + '" data-n="' + sn + '" onclick="app.copyImgMd(this.dataset.id,this.dataset.n);app.closeModal(\'fM\')"><img class="om-emoji" src="/openmoji/1F4DD.svg" alt="📝"> Markdown</button>' +
+           '</div>' +
+           '<div class="flex-row" style="width:100%">' +
            fastDlBtn +
            '<a href="/file/' + f.id + '?dl=1' + pq + '" class="btn btn-outline flex-1" target="_blank" style="text-decoration:none;padding:12px;font-size:14px" onclick="app.closeModal(\'fM\')"><img class="om-emoji" src="/openmoji/1F4E5.svg" alt="📥"> 原生</a>' +
+           '</div>' +
+           '<div class="flex-row" style="width:100%">' +
+           '<a href="/share/' + f.id + ps + '" class="btn btn-outline flex-1" target="_blank" style="text-decoration:none;padding:12px;font-size:14px" onclick="app.closeModal(\'fM\')"><img class="om-emoji" src="/openmoji/1F4E4.svg" alt="📤"> 分享</a>' +
            '<button class="btn flex-1" style="padding:12px;background:#10b981" onclick="document.getElementById(\'primary-actions\').style.display=\'none\';document.getElementById(\'bg-options\').style.display=\'flex\'"><img class="om-emoji" src="/openmoji/1F5BC.svg" alt="🖼️"> 设为壁纸</button>' +
            '</div>' +
-           '<div id="bg-options" class="flex-row" style="display:none;flex-wrap:wrap;width:100%">' +
+           '</div>' +
+           '<div id="bg-options" style="display:none;flex-direction:column;gap:10px;width:100%">' +
+           '<div class="flex-row" style="width:100%">' +
            '<button class="btn btn-success flex-1" style="padding:12px" data-id="' + f.id + '" onclick="app.setWallpaper(this.dataset.id,\'pc\')"><img class="om-emoji" src="/openmoji/1F4BB.svg" alt="💻"> 设为 PC 横屏</button>' +
            '<button class="btn btn-success flex-1" style="padding:12px" data-id="' + f.id + '" onclick="app.setWallpaper(this.dataset.id,\'mobile\')"><img class="om-emoji" src="/openmoji/1F4F1.svg" alt="📱"> 设为手机竖屏</button>' +
-           '<button class="btn btn-outline flex-1" style="padding:12px" onclick="document.getElementById(\'bg-options\').style.display=\'none\';document.getElementById(\'primary-actions\').style.display=\'flex\'">取消</button>' +
+           '</div>' +
+           '<button class="btn btn-outline" style="width:100%;padding:12px" onclick="document.getElementById(\'bg-options\').style.display=\'none\';document.getElementById(\'primary-actions\').style.display=\'flex\'">取消</button>' +
            '</div>';
     } else {
-      b += fastDlBtn +
+      b += '<div class="flex-row" style="width:100%">' +
+           fastDlBtn +
            '<a href="/file/' + f.id + '?dl=1' + pq + '" class="btn btn-outline flex-1" target="_blank" style="text-decoration:none;padding:12px;font-size:14px" onclick="app.closeModal(\'fM\')"><img class="om-emoji" src="/openmoji/1F4E5.svg" alt="📥"> 原生下载</a>' +
-           '<a href="/share/' + f.id + ps + '" class="btn btn-outline flex-1" target="_blank" style="text-decoration:none;padding:12px;font-size:14px" onclick="app.closeModal(\'fM\')"><img class="om-emoji" src="/openmoji/1F4E4.svg" alt="📤"> 分享</a>';
+           '</div>' +
+           '<div class="flex-row" style="width:100%">' +
+           '<a href="/share/' + f.id + ps + '" class="btn btn-outline flex-1" target="_blank" style="text-decoration:none;padding:12px;font-size:14px" onclick="app.closeModal(\'fM\')"><img class="om-emoji" src="/openmoji/1F4E4.svg" alt="📤"> 分享</a>' +
+           '</div>';
     }
 
     if (this.state.isAdmin) {
-      b += '<div style="width:100%;height:1px;background:var(--cd);margin:10px 0;opacity:0.5"></div>' +
-           '<div class="flex-row" style="flex-wrap:wrap;justify-content:center">' +
+      b += '<div style="width:100%;height:1px;background:var(--cd);margin:4px 0;opacity:0.5"></div>' +
+           '<div class="flex-row" style="width:100%">' +
            '<button id="cmd_wg_btn" class="btn btn-outline btn-sm flex-1"><img class="om-emoji" src="/openmoji/1F4CB.svg" alt="📋"> 复制 ' + atob('V2dldA==') + ' 下载</button>' +
            '<button id="cmd_cu_btn" class="btn btn-outline btn-sm flex-1"><img class="om-emoji" src="/openmoji/1F4CB.svg" alt="📋"> 复制 ' + atob('Q3VybA==') + ' 下载</button>' +
            '</div>' +
-           '<div style="width:100%;height:1px;background:var(--cd);margin:10px 0;opacity:0.5"></div>' +
-           '<div class="flex-row" style="flex-wrap:wrap;justify-content:center">' +
+           '<div class="flex-row" style="width:100%">' +
            '<button class="btn btn-outline btn-sm flex-1" data-id="' + f.id + '" data-n="' + sn + '" onclick="app.adminAct(\'rename\',this.dataset.id,this.dataset.n);app.closeModal(\'fM\')"><img class="om-emoji" src="/openmoji/270F.svg" alt="✏️"> 重命名</button>' +
            '<button class="btn btn-outline btn-sm flex-1" data-id="' + f.id + '" data-fd="' + this.escapeHTML(f.folder || '') + '" onclick="app.adminAct(\'move\',this.dataset.id,this.dataset.fd);app.closeModal(\'fM\')"><img class="om-emoji" src="/openmoji/2702.svg" alt="✂️"> 移动</button>' +
+           '</div>' +
+           '<div class="flex-row" style="width:100%">' +
            '<button class="btn ' + (f.is_hidden ? 'btn-warn' : 'btn-outline') + ' btn-sm flex-1" data-id="' + f.id + '" onclick="app.adminAct(\'toggle_hide\',this.dataset.id);app.closeModal(\'fM\')"><img class="om-emoji" src="/openmoji/1F441.svg" alt="👁️"> 显隐</button>' +
            '<button class="btn btn-danger btn-sm flex-1" data-id="' + f.id + '" onclick="app.adminAct(\'delete\',this.dataset.id);app.closeModal(\'fM\')"><img class="om-emoji" src="/openmoji/1F5D1.svg" alt="🗑️"> 删除</button>' +
            '</div>';
     }
-    b += '<button class="btn btn-outline" style="width:100%;margin-top:10px;padding:12px;border-radius:12px" onclick="app.closeModal(\'fM\')"><img class="om-emoji" src="/openmoji/274C.svg" alt="❌"> 关闭面板</button>';
+    b += '<button class="btn btn-outline" style="width:100%;margin-top:4px;padding:12px;border-radius:12px" onclick="app.closeModal(\'fM\')"><img class="om-emoji" src="/openmoji/274C.svg" alt="❌"> 关闭面板</button>';
     return b;
   },
 

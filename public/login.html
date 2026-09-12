@@ -67,6 +67,7 @@
   </style>
 </head>
 <body>
+  <div class="bg-layer" id="bg-layer"></div>
   <div class="c">
     <h2 style="margin-top:0;font-size:22px;display:flex;align-items:center;justify-content:center;gap:6px"><img class="om-emoji om-emoji-lg" src="/openmoji/1F510.svg" alt="🔐"> 管理员验证</h2>
     <p style="color:gray;font-size:13px;margin-bottom:20px">需要鉴权以访问核心控制面板</p>
@@ -77,5 +78,29 @@
     </form>
     <a href="/" style="display:inline-block;margin-top:15px;font-size:13px;color:gray;text-decoration:none;">&larr; 返回首页</a>
   </div>
+  <script>
+    (function(){
+      try {
+        var p = localStorage.getItem('cfg_bgPc') || '';
+        var m = localStorage.getItem('cfg_bgMobile') || p;
+        function syncBg() {
+          var isM = window.innerWidth <= 768;
+          var u = isM ? (m || p) : (p || m);
+          if (u) {
+            document.body.style.backgroundColor = 'transparent';
+            document.documentElement.style.setProperty('--user-bg-url', 'url("' + u + '")');
+            document.documentElement.style.setProperty('--bg-op', '1');
+            var el = document.getElementById('bg-layer');
+            if (el) {
+              el.style.backgroundImage = 'url("' + u + '")';
+              el.style.opacity = '1';
+            }
+          }
+        }
+        syncBg();
+        window.addEventListener('resize', syncBg);
+      } catch(e) {}
+    })();
+  </script>
 </body>
 </html>

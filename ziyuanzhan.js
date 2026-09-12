@@ -29,8 +29,33 @@ function getBgLayer(c) {
   const cfg = c || globalSiteConfig || {};
   const pc = (cfg.bgPc || cfg.bgMobile || '').trim();
   const mb = (cfg.bgMobile || cfg.bgPc || '').trim();
-  if (!pc && !mb) return '';
-  return '<style>body{background-color:transparent!important;}.bg-layer{position:fixed;top:-5%;left:-5%;width:110vw;height:110vh;pointer-events:none;z-index:-3;background-size:cover;background-position:center;filter:blur(20px) brightness(1.05) saturate(110%);background-image:url("' + pc + '");}@media(max-width:768px){.bg-layer{background-image:url("' + mb + '");}}</style><div class="bg-layer"></div>';
+  return '<div class="bg-layer" id="bg-layer"></div>' +
+    '<style>' +
+    'html,body{background-color:transparent!important;}' +
+    ':root{--bg-op:1;}' +
+    '.bg-layer{position:fixed!important;top:-5%!important;left:-5%!important;width:110vw!important;height:110vh!important;pointer-events:none!important;z-index:-3!important;background-size:cover!important;background-position:center!important;filter:blur(20px) brightness(1.05) saturate(110%)!important;opacity:0;transition:opacity 0.4s ease!important;}' +
+    (pc ? '.bg-layer{background-image:url("' + pc + '");opacity:1!important;}' : '') +
+    (mb ? '@media(max-width:768px){.bg-layer{background-image:url("' + mb + '");}}' : '') +
+    '</style>' +
+    '<script>' +
+    '(function(){' +
+    'try{' +
+    'var p=' + JSON.stringify(cfg.bgPc || '') + '||localStorage.getItem("cfg_bgPc")||"";' +
+    'var m=' + JSON.stringify(cfg.bgMobile || '') + '||localStorage.getItem("cfg_bgMobile")||p;' +
+    'function syncBg(){' +
+    'var isM=window.innerWidth<=768;var u=isM?(m||p):(p||m);' +
+    'if(u){' +
+    'document.documentElement.style.setProperty("--user-bg-url","url(\\""+u+"\\")");' +
+    'document.documentElement.style.setProperty("--bg-op","1");' +
+    'var el=document.getElementById("bg-layer");' +
+    'if(el){el.style.backgroundImage="url(\\""+u+"\\")";el.style.opacity="1";}' +
+    '}' +
+    '}' +
+    'syncBg();' +
+    'window.addEventListener("resize",syncBg);' +
+    '}catch(e){}' +
+    '})();' +
+    '</script>';
 }
 
 function escapeHTML(s) {
