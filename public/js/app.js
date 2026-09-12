@@ -141,6 +141,18 @@ const app = {
   showUploadModal() {
     const uf = document.getElementById('up-folder');
     if (uf) uf.value = this.state.folder !== null ? this.state.folder : '';
+    const btn = document.getElementById('uploadBtn');
+    if (btn) {
+      if (this.isUploading) {
+        btn.disabled = true;
+        btn.style.opacity = '0.6';
+        btn.innerHTML = '<img class="om-emoji" src="/openmoji/1F525.svg" alt="🔥"> 上传进行中 (见主界面进度条)';
+      } else {
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        btn.innerHTML = '<img class="om-emoji" src="/openmoji/26A1.svg" alt="⚡"> 发起多线程疾速并发上传';
+      }
+    }
     this.openStaticModal('modal-upload');
   },
 
@@ -1203,8 +1215,14 @@ const app = {
     document.getElementById('uploadStatus').style.color = '#ef4444';
     setTimeout(() => {
       this.uploadQueue = [];
-      document.getElementById('uploadProgress').style.display = 'none';
-      document.getElementById('uploadBtn').style.display = 'flex';
+      const upProgress = document.getElementById('uploadProgress');
+      if (upProgress) upProgress.style.display = 'none';
+      const upBtn = document.getElementById('uploadBtn');
+      if (upBtn) {
+        upBtn.disabled = false;
+        upBtn.style.opacity = '1';
+        upBtn.innerHTML = '<img class="om-emoji" src="/openmoji/26A1.svg" alt="⚡"> 发起多线程疾速并发上传';
+      }
       document.getElementById('file-name-display').innerHTML = '<img class="om-emoji" src="/openmoji/2795.svg" alt="➕"> 点击选择多文件，或直接拖拽文件夹到此处';
       document.getElementById('queue-info').innerText = '完美支持多文件、多级文件夹拖拽识别并发';
       this.fetchData();
@@ -1213,11 +1231,18 @@ const app = {
 
   async startUploadQueue() {
     if (this.isUploading || this.uploadQueue.length === 0) return;
+    this.closeModal('modal-upload');
     this.isUploading = true;
     this.cancelFlag = false;
     let total = this.uploadQueue.length, completed = 0;
-    document.getElementById('uploadBtn').style.display = 'none';
-    document.getElementById('uploadProgress').style.display = 'block';
+    const upBtn = document.getElementById('uploadBtn');
+    if (upBtn) {
+      upBtn.disabled = true;
+      upBtn.style.opacity = '0.6';
+      upBtn.innerHTML = '<img class="om-emoji" src="/openmoji/1F525.svg" alt="🔥"> 上传进行中 (见主界面进度条)';
+    }
+    const upProgress = document.getElementById('uploadProgress');
+    if (upProgress) upProgress.style.display = 'block';
     document.getElementById('uploadStatus').innerHTML = '<img class="om-emoji" src="/openmoji/1F525.svg" alt="🔥"> 多线程队列处理中...';
     document.getElementById('uploadStatus').style.color = 'var(--primary)';
 
@@ -1257,8 +1282,14 @@ const app = {
     if (!this.cancelFlag) {
       document.getElementById('uploadStatus').innerHTML = '<img class="om-emoji" src="/openmoji/1F389.svg" alt="🎉"> 队列全部完成！';
       setTimeout(() => {
-        document.getElementById('uploadProgress').style.display = 'none';
-        document.getElementById('uploadBtn').style.display = 'flex';
+        const upProgress = document.getElementById('uploadProgress');
+        if (upProgress) upProgress.style.display = 'none';
+        const upBtn = document.getElementById('uploadBtn');
+        if (upBtn) {
+          upBtn.disabled = false;
+          upBtn.style.opacity = '1';
+          upBtn.innerHTML = '<img class="om-emoji" src="/openmoji/26A1.svg" alt="⚡"> 发起多线程疾速并发上传';
+        }
         document.getElementById('file-name-display').innerHTML = '<img class="om-emoji" src="/openmoji/2795.svg" alt="➕"> 点击选择多文件，或直接拖拽文件夹到此处';
         document.getElementById('queue-info').innerText = '完美支持多文件、多级文件夹拖拽识别并发';
         this.fetchData();
