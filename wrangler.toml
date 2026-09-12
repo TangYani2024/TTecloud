@@ -2,12 +2,5 @@ name = "cloud"
 compatibility_date = "2024-01-01"
 pages_build_output_dir = "public"
 
-# D1 数据库绑定（在 Pages 控制台或者本地运行通过以下绑定注入 DB）
-[[d1_databases]]
-binding = "DB"
-database_name = "ziyuanzhan-db"
-database_id = "your-d1-database-id-here"
-
-# 默认公开环境变量
 [vars]
 ADMIN_USER = "admin"
