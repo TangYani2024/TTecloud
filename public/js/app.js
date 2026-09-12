@@ -93,6 +93,66 @@ const app = {
     }
   },
 
+  fabExpanded: false,
+
+  toggleFabOrUpload() {
+    if (this.fabExpanded) {
+      this.collapseFab();
+      this.showUploadModal();
+    } else {
+      this.expandFab();
+    }
+  },
+
+  expandFab() {
+    this.fabExpanded = true;
+    const c = document.getElementById('admin-fab-container');
+    if (c) c.classList.add('expanded');
+  },
+
+  collapseFab() {
+    this.fabExpanded = false;
+    const c = document.getElementById('admin-fab-container');
+    if (c) c.classList.remove('expanded');
+  },
+
+  openStaticModal(id) {
+    this.collapseFab();
+    history.pushState({ mdl: id }, '');
+    const m = document.getElementById(id);
+    if (!m) return;
+    document.body.classList.add('modal-open');
+    m.style.display = 'flex';
+    m.style.opacity = '0';
+    const mc = m.querySelector('.modal-content');
+    if (mc) {
+      mc.style.opacity = '0';
+      mc.style.transform = 'scale(0.95) translateY(15px)';
+    }
+    m.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, fill: 'forwards' });
+    if (mc) {
+      mc.animate(
+        [{ transform: 'scale(0.95) translateY(15px)', opacity: 0 }, { transform: 'scale(1) translateY(0)', opacity: 1 }],
+        { duration: 350, easing: 'cubic-bezier(0.175,0.885,0.32,1.275)', fill: 'forwards' }
+      );
+    }
+  },
+
+  showUploadModal() {
+    const uf = document.getElementById('up-folder');
+    if (uf) uf.value = this.state.folder !== null ? this.state.folder : '';
+    this.openStaticModal('modal-upload');
+  },
+
+  showCliModal() {
+    this.openStaticModal('modal-cli');
+  },
+
+  showSettingsModal() {
+    this.refreshSettingsUI();
+    this.openStaticModal('modal-settings');
+  },
+
   async init() {
     document.querySelectorAll('.d-b64').forEach(e => e.innerText = atob(e.dataset.b));
     this.refreshSettingsUI();
@@ -109,7 +169,11 @@ const app = {
     });
 
     window.addEventListener('popstate', e => {
-      document.querySelectorAll('.modal-overlay').forEach(m => app.closeModal(m.id, 1));
+      document.querySelectorAll('.modal-overlay').forEach(m => {
+        if (m.style.display !== 'none') {
+          app.closeModal(m.id, 1);
+        }
+      });
     });
 
     window.addEventListener('resize', () => {
@@ -118,8 +182,22 @@ const app = {
       this.lastWidth = cw;
       this.updateAppHeight();
       this.updInd('ind-main', document.querySelector('#main-nav .active'));
-      this.updInd('ind-up', document.querySelector('#up-nav .active'));
       this.applyBg();
+    });
+
+    document.addEventListener('click', e => {
+      const fab = document.getElementById('admin-fab-container');
+      if (this.fabExpanded && fab && !fab.contains(e.target)) {
+        this.collapseFab();
+      }
+    });
+
+    document.querySelectorAll('.modal-overlay').forEach(ov => {
+      ov.addEventListener('click', e => {
+        if (e.target === ov) {
+          app.closeModal(ov.id);
+        }
+      });
     });
   },
 
@@ -307,7 +385,8 @@ const app = {
       
       const inFolder = this.state.folder !== null;
       document.getElementById('main-nav').style.display = rs.isAdmin ? 'flex' : 'none';
-      document.getElementById('admin-panel').style.display = rs.isAdmin ? 'block' : 'none';
+      const fab = document.getElementById('admin-fab-container');
+      if (fab) fab.style.display = rs.isAdmin ? 'flex' : 'none';
       document.getElementById('btn-back').style.display = inFolder ? 'inline-flex' : 'none';
       const folderDisplayName = inFolder ? (this.state.folder.trim() || '空白目录') : '根目录';
       document.getElementById('breadcrumb').innerHTML = inFolder 
@@ -324,7 +403,6 @@ const app = {
         
         setTimeout(() => {
           this.updInd('ind-main', document.querySelector('#main-nav .active'));
-          this.updInd('ind-up', document.querySelector('#up-nav .active'));
         }, 50);
         
         if (!this.configLoaded) {
@@ -580,14 +658,22 @@ const app = {
     }
     const m = document.getElementById(id);
     if (m) {
-      if (!document.querySelector('.modal-overlay:not(#' + id + ')')) {
+      const visibleOverlays = Array.from(document.querySelectorAll('.modal-overlay'))
+        .filter(x => x.id !== id && x.style.display !== 'none');
+      if (visibleOverlays.length === 0) {
         document.body.classList.remove('modal-open');
       }
       const mc = m.querySelector('.modal-content');
       if (mc) mc.animate([{ transform: 'scale(1) translateY(0)', opacity: 1 }, { transform: 'scale(0.95) translateY(15px)', opacity: 0 }], { duration: 200, easing: 'ease-in', fill: 'forwards' });
       const a = m.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 200, fill: 'forwards' });
       if (!p) history.back();
-      a.onfinish = () => m.remove();
+      a.onfinish = () => {
+        if (['modal-upload', 'modal-cli', 'modal-settings'].includes(id)) {
+          m.style.display = 'none';
+        } else {
+          m.remove();
+        }
+      };
     }
   },
 

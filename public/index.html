@@ -34,86 +34,6 @@
       </div>
     </div>
 
-    <!-- 管理员控制台 -->
-    <div class="card" id="admin-panel" style="display:none;border-top:4px solid var(--primary)">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;flex-wrap:wrap;gap:5px">
-        <h3 style="margin:0;font-size:15px"><img class="om-emoji" src="/openmoji/1F680.svg" alt="🚀"> 高速入库核心</h3>
-        <div class="nav-tabs" id="up-nav">
-          <div class="nav-indicator" id="ind-up"></div>
-          <button id="mode-local" class="nav-tab active" onclick="app.switchUploadMode('local')">直传</button>
-          <button id="mode-cli" class="nav-tab" onclick="app.switchUploadMode('cli')">终端CLI</button>
-          <button id="mode-settings" class="nav-tab" onclick="app.switchUploadMode('settings')"><img class="om-emoji" src="/openmoji/2699.svg" alt="⚙️"> 设置</button>
-        </div>
-      </div>
-
-      <!-- 直传表单 -->
-      <div id="form-local" style="display:flex;flex-direction:column;gap:12px">
-        <div class="flex-row">
-          <input type="text" id="up-folder" placeholder="输入目录 (默认根目录)" style="flex:1">
-        </div>
-        <div class="flex-row" style="flex-wrap:wrap">
-          <button class="btn btn-sm btn-success flex-1" style="white-space:nowrap;border:none" onclick="app.adminAct('sync_b2_to_d1',null,null)"><img class="om-emoji" src="/openmoji/1F504.svg" alt="🔄"> 同步D1</button>
-          <button class="btn btn-sm btn-outline flex-1" style="white-space:nowrap" onclick="app.showSessionsModal()"><img class="om-emoji" src="/openmoji/1F9F9.svg" alt="🧹"> 碎片</button>
-          <button class="btn btn-sm btn-warn flex-1" style="white-space:nowrap;border:none" onclick="app.adminAct('sync_d1_ghosts',null,null)"><img class="om-emoji" src="/openmoji/1F5D1.svg" alt="🗑️"> 清死链</button>
-          <button class="btn btn-sm btn-danger flex-1" style="white-space:nowrap;border:none" onclick="app.adminAct('sync_b2_orphans',null,null)"><img class="om-emoji" src="/openmoji/1F4A3.svg" alt="💣"> 删游离</button>
-        </div>
-        <div class="upload-box" id="drop-zone" ondragover="event.preventDefault();this.style.borderColor='var(--primary)'" ondragleave="event.preventDefault();this.style.borderColor=''" ondrop="event.preventDefault();this.style.borderColor='';app.enqueueFiles(event.dataTransfer.items,true)">
-          <input type="file" id="up-file" multiple onchange="app.enqueueFiles(this.files,false)">
-          <div id="file-name-display" style="color:var(--primary);font-weight:700;font-size:15px"><img class="om-emoji" src="/openmoji/2795.svg" alt="➕"> 点击选择多文件，或直接拖拽文件夹到此处</div>
-        </div>
-        <div id="queue-info" style="font-size:12px;color:gray;text-align:center">完美支持多文件、多级文件夹拖拽识别并发</div>
-        <button id="uploadBtn" class="btn" onclick="app.startUploadQueue()" style="width:100%;font-size:16px;padding:14px"><img class="om-emoji" src="/openmoji/26A1.svg" alt="⚡"> 发起多线程疾速并发上传</button>
-        
-        <div id="uploadProgress" style="display:none;width:100%;padding:16px;background:rgba(0,0,0,.03);border-radius:12px;border:1px inset var(--cd)">
-          <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:8px">
-            <span id="uploadStatus" style="color:var(--primary);font-weight:700">上传队列处理中...</span>
-            <span id="uploadPercent" style="font-weight:700">0/0</span>
-          </div>
-          <div class="progress-container" style="height:14px">
-            <div id="uploadProgressBar" class="progress-bar" style="width:0%"></div>
-          </div>
-          <div style="display:flex;justify-content:flex-end;margin-top:14px;align-items:center">
-            <button type="button" id="cancelUploadBtn" class="btn btn-sm btn-danger" onclick="app.cancelQueue()"><img class="om-emoji" src="/openmoji/1F5D1.svg" alt="🗑️"> 取消全部队列</button>
-          </div>
-          <div id="queueList" style="margin-top:15px;max-height:220px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding-right:5px"></div>
-        </div>
-      </div>
-
-      <!-- 终端 CLI 交互 -->
-      <div id="form-cli" style="display:none;flex-direction:column;gap:12px;background:rgba(0,0,0,.03);padding:16px;border-radius:12px">
-        <h3 style="margin:0 0 5px;font-size:15px"><img class="om-emoji" src="/openmoji/1F4BB.svg" alt="💻"> 终端 CLI 交互</h3>
-        <p style="font-size:12px;color:gray;margin:0;line-height:1.5">将文件直接推送到 B2 存储桶，速度极快且无超时限制。上传完成后，请回到 <b style="color:var(--primary)">直传</b> 面板点击【同步D1】将其归档入库。</p>
-        <div style="background:#1e293b;color:#a5b4fc;padding:12px;border-radius:10px;font-family:monospace;font-size:12px;overflow-x:auto;line-height:1.6;white-space:nowrap">
-          <div style="color:#60a5fa"># AWS CLI 方式 (需先配置对应桶权限)</div>
-          <span class="d-b64" data-b="YXdzIHMzIGNw"></span> ./your_file s3://<span id="cli-bk1">tangyani-ziyuan</span>/ --endpoint-url https://s3.us-east-005.backblazeb2.com<br><br>
-          <div style="color:#60a5fa"># Rclone 方式</div>
-          <span class="d-b64" data-b="cmNsb25lIGNvcHk="></span> ./your_file b2_remote:<span id="cli-bk2">tangyani-ziyuan</span>/
-        </div>
-        <div style="margin-top:5px;display:flex;gap:10px;align-items:center">
-          <input type="text" id="cli-temp-name" placeholder="或输入文件名生成一键临时预签名命令..." style="flex:1;margin:0;font-size:12px">
-          <button class="btn btn-success btn-sm" onclick="app.generateCliUpload()" style="white-space:nowrap">获取 <span class="d-b64" data-b="Q3VybA=="></span> 上传</button>
-        </div>
-      </div>
-
-      <!-- 设置 -->
-      <div id="form-settings" style="display:none;flex-direction:column;gap:12px;background:rgba(0,0,0,.03);padding:16px;border-radius:12px">
-        <h3 style="margin:0 0 5px;font-size:15px"><img class="om-emoji" src="/openmoji/2699.svg" alt="⚙️"> 进阶配置</h3>
-        <label style="font-size:13px;display:flex;align-items:center;gap:8px;font-weight:bold;"><img class="om-emoji" src="/openmoji/1F4BB.svg" alt="💻"> PC 横屏壁纸</label>
-        <input type="url" id="cfg-bgPc" placeholder="输入图片直链 (留空恢复默认)" style="margin:0;margin-bottom:8px;">
-        <label style="font-size:13px;display:flex;align-items:center;gap:8px;font-weight:bold;"><img class="om-emoji" src="/openmoji/1F4F1.svg" alt="📱"> 手机竖屏壁纸</label>
-        <input type="url" id="cfg-bgMobile" placeholder="输入图片直链 (留空恢复默认)" style="margin:0;margin-bottom:12px;">
-        <label style="font-size:13px;display:flex;align-items:center;gap:8px;cursor:pointer">
-          <input type="checkbox" id="cfg-expect" style="width:auto;margin:0"> 终端 CLI 附加 Expect: 100-continue 头
-        </label>
-        <p style="font-size:11px;color:gray;margin:0 0 10px 24px">某些防火墙或网关遇到此头会报 417 错误，取消勾选即可跳过此协议握手。</p>
-        <label style="font-size:13px;display:flex;align-items:center;gap:8px;cursor:pointer">
-          <input type="checkbox" id="cfg-sha256" style="width:auto;margin:0"> 启用强哈希运算防断流 (前端)
-        </label>
-        <p style="font-size:11px;color:gray;margin:0 0 10px 24px">在前端计算 SHA256 确保完整性。注意：此功能极度耗费手机/低端机 CPU 甚至可能导致崩溃，请谨慎开启。</p>
-        <button id="save-cfg-btn" class="btn btn-success" style="width:100%;font-size:15px;padding:12px;" onclick="app.saveSettingsFromUI()"><img class="om-emoji" src="/openmoji/1F4BE.svg" alt="💾"> 保存并同步云端配置</button>
-      </div>
-    </div>
-
     <!-- 导航栏与搜索 -->
     <div class="card" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
       <button class="btn btn-sm btn-outline" onclick="app.goHome()" id="btn-back" style="display:none">&larr; 返回</button>
@@ -123,6 +43,184 @@
 
     <!-- 文件与目录展示区域 -->
     <div id="dynamic-area" style="min-height:200px"></div>
+  </div>
+
+  <!-- 管理员悬浮操作按钮 (FAB) -->
+  <div id="admin-fab-container" class="admin-fab-container" style="display:none">
+    <div class="fab-sub-buttons" id="fab-sub-buttons">
+      <button type="button" class="fab-btn fab-btn-sub" id="fab-sub-cli" onclick="app.showCliModal()" title="CLI与维护">
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="none">
+          <path d="M6 3h8l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" fill="#1E2A3A" fill-opacity="0.4" stroke="#61DAFB" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M14 3v5h5" fill="none" stroke="#61DAFB" stroke-width="1.2" stroke-opacity="0.6" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M10.5 13.5L8.5 16l2 2.5" stroke="#61DAFB" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="0.9"/>
+          <path d="M13.5 13.5l2 2.5-2 2.5" stroke="#61DAFB" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="0.9"/>
+          <circle cx="12" cy="9" r="1" fill="#F0DB4F" fill-opacity="0.6" stroke="none"/>
+        </svg>
+        <span class="fab-btn-tip">CLI与维护</span>
+      </button>
+      <button type="button" class="fab-btn fab-btn-sub" id="fab-sub-settings" onclick="app.showSettingsModal()" title="设置">
+        <img class="om-emoji" src="/openmoji/2699.svg" alt="⚙️" style="width:24px;height:24px">
+        <span class="fab-btn-tip">进阶设置</span>
+      </button>
+    </div>
+    <button type="button" class="fab-btn fab-btn-main" id="fab-main-btn" onclick="app.toggleFabOrUpload()" title="管理操作">
+      <svg class="fab-icon-x" viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="6" y1="6" x2="18" y2="18"></line>
+        <line x1="6" y1="18" x2="18" y2="6"></line>
+      </svg>
+    </button>
+  </div>
+
+  <!-- 上传弹窗 -->
+  <div class="modal-overlay" id="modal-upload" style="display:none;opacity:0;">
+    <div class="modal-content" style="max-width:480px;width:92%;max-height:85vh;overflow-y:auto;transform:scale(0.95) translateY(15px);opacity:0">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <h3 style="margin:0;font-size:17px;display:flex;align-items:center;gap:6px">
+          <img class="om-emoji" src="/openmoji/1F680.svg" alt="🚀"> 高速入库上传
+        </h3>
+        <button type="button" class="btn btn-sm btn-outline" style="padding:4px 10px;border-radius:8px" onclick="app.closeModal('modal-upload')">✕</button>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div class="flex-row">
+          <input type="text" id="up-folder" placeholder="输入存储目录 (默认当前目录/根目录)" style="flex:1;margin:0">
+        </div>
+
+        <div class="upload-box" id="drop-zone" ondragover="event.preventDefault();this.style.borderColor='var(--primary)'" ondragleave="event.preventDefault();this.style.borderColor=''" ondrop="event.preventDefault();this.style.borderColor='';app.enqueueFiles(event.dataTransfer.items,true)">
+          <input type="file" id="up-file" multiple onchange="app.enqueueFiles(this.files,false)">
+          <div id="file-name-display" style="color:var(--primary);font-weight:700;font-size:15px">
+            <img class="om-emoji" src="/openmoji/2795.svg" alt="➕"> 点击选择多文件，或直接拖拽文件夹到此处
+          </div>
+        </div>
+        <div id="queue-info" style="font-size:12px;color:gray;text-align:center">完美支持多文件、多级文件夹拖拽识别并发</div>
+
+        <button id="uploadBtn" class="btn" onclick="app.startUploadQueue()" style="width:100%;font-size:16px;padding:14px">
+          <img class="om-emoji" src="/openmoji/26A1.svg" alt="⚡"> 发起多线程疾速并发上传
+        </button>
+
+        <div id="uploadProgress" style="display:none;width:100%;padding:16px;background:rgba(0,0,0,.03);border-radius:12px;border:1px inset var(--cd)">
+          <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:8px">
+            <span id="uploadStatus" style="color:var(--primary);font-weight:700">上传队列处理中...</span>
+            <span id="uploadPercent" style="font-weight:700">0/0</span>
+          </div>
+          <div class="progress-container" style="height:14px">
+            <div id="uploadProgressBar" class="progress-bar" style="width:0%"></div>
+          </div>
+          <div style="display:flex;justify-content:flex-end;margin-top:14px;align-items:center">
+            <button type="button" id="cancelUploadBtn" class="btn btn-sm btn-danger" onclick="app.cancelQueue()">
+              <img class="om-emoji" src="/openmoji/1F5D1.svg" alt="🗑️"> 取消全部队列
+            </button>
+          </div>
+          <div id="queueList" style="margin-top:15px;max-height:220px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding-right:5px"></div>
+        </div>
+
+        <button class="btn btn-outline" style="width:100%;margin-top:6px;padding:12px;border-radius:12px" onclick="app.closeModal('modal-upload')">
+          <img class="om-emoji" src="/openmoji/274C.svg" alt="❌"> 关闭
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 终端 CLI 与系统维护弹窗 -->
+  <div class="modal-overlay" id="modal-cli" style="display:none;opacity:0;">
+    <div class="modal-content" style="max-width:440px;width:92%;max-height:85vh;overflow-y:auto;transform:scale(0.95) translateY(15px);opacity:0">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <h3 style="margin:0;font-size:17px;display:flex;align-items:center;gap:6px">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none">
+            <path d="M6 3h8l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" fill="#1E2A3A" fill-opacity="0.4" stroke="#61DAFB" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M14 3v5h5" fill="none" stroke="#61DAFB" stroke-width="1.2" stroke-opacity="0.6" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M10.5 13.5L8.5 16l2 2.5" stroke="#61DAFB" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="0.9"/>
+            <path d="M13.5 13.5l2 2.5-2 2.5" stroke="#61DAFB" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="0.9"/>
+            <circle cx="12" cy="9" r="1" fill="#F0DB4F" fill-opacity="0.6" stroke="none"/>
+          </svg>
+          终端 CLI 与数据维护
+        </h3>
+        <button type="button" class="btn btn-sm btn-outline" style="padding:4px 10px;border-radius:8px" onclick="app.closeModal('modal-cli')">✕</button>
+      </div>
+
+      <!-- 数据维护操作区（原直传面板中的同步与清理按钮） -->
+      <div style="background:rgba(0,0,0,0.02);padding:14px;border-radius:12px;border:1px solid var(--cd);display:flex;flex-direction:column;gap:10px">
+        <div style="font-size:13px;font-weight:700;color:var(--tx);display:flex;align-items:center;gap:6px">
+          <img class="om-emoji" src="/openmoji/1F504.svg" alt="🔄"> 存储桶与数据库维护
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <button class="btn btn-success flex-1" style="white-space:nowrap;padding:12px 10px;font-size:13px" onclick="app.adminAct('sync_b2_to_d1',null,null)">
+            <img class="om-emoji" src="/openmoji/1F504.svg" alt="🔄"> 同步D1
+          </button>
+          <button class="btn btn-outline flex-1" style="white-space:nowrap;padding:12px 10px;font-size:13px" onclick="app.showSessionsModal()">
+            <img class="om-emoji" src="/openmoji/1F9F9.svg" alt="🧹"> 碎片管理
+          </button>
+          <button class="btn btn-warn flex-1" style="white-space:nowrap;padding:12px 10px;font-size:13px" onclick="app.adminAct('sync_d1_ghosts',null,null)">
+            <img class="om-emoji" src="/openmoji/1F5D1.svg" alt="🗑️"> 清死链
+          </button>
+          <button class="btn btn-danger flex-1" style="white-space:nowrap;padding:12px 10px;font-size:13px" onclick="app.adminAct('sync_b2_orphans',null,null)">
+            <img class="om-emoji" src="/openmoji/1F4A3.svg" alt="💣"> 删游离
+          </button>
+        </div>
+      </div>
+
+      <!-- 临时预签名命令直传 -->
+      <div style="background:rgba(0,0,0,0.02);padding:14px;border-radius:12px;border:1px solid var(--cd);display:flex;flex-direction:column;gap:10px">
+        <div style="font-size:13px;font-weight:700;color:var(--tx);display:flex;align-items:center;gap:6px">
+          <img class="om-emoji" src="/openmoji/1F4BB.svg" alt="💻"> 临时预签名 Curl 直传
+        </div>
+        <p style="font-size:12px;color:gray;margin:0;line-height:1.5">输入文件名生成专属直传命令，绕过网关直接秒速推送到 B2 存储桶：</p>
+        <input type="text" id="cli-temp-name" placeholder="输入要上传的文件名 (含后缀)..." style="margin:0;padding:12px;font-size:13px">
+        <button class="btn btn-success" style="width:100%;padding:12px;font-size:14px" onclick="app.generateCliUpload()">
+          <img class="om-emoji" src="/openmoji/1F4CB.svg" alt="📋"> 获取并复制 Curl 命令
+        </button>
+      </div>
+
+      <button class="btn btn-outline" style="width:100%;margin-top:6px;padding:12px;border-radius:12px" onclick="app.closeModal('modal-cli')">
+        <img class="om-emoji" src="/openmoji/274C.svg" alt="❌"> 关闭
+      </button>
+    </div>
+  </div>
+
+  <!-- 设置弹窗 -->
+  <div class="modal-overlay" id="modal-settings" style="display:none;opacity:0;">
+    <div class="modal-content" style="max-width:440px;width:92%;max-height:85vh;overflow-y:auto;transform:scale(0.95) translateY(15px);opacity:0">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <h3 style="margin:0;font-size:17px;display:flex;align-items:center;gap:6px">
+          <img class="om-emoji" src="/openmoji/2699.svg" alt="⚙️"> 进阶系统配置
+        </h3>
+        <button type="button" class="btn btn-sm btn-outline" style="padding:4px 10px;border-radius:8px" onclick="app.closeModal('modal-settings')">✕</button>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <label style="font-size:13px;display:flex;align-items:center;gap:8px;font-weight:bold;">
+          <img class="om-emoji" src="/openmoji/1F4BB.svg" alt="💻"> PC 横屏壁纸
+        </label>
+        <input type="url" id="cfg-bgPc" placeholder="输入图片直链 (留空恢复默认)" style="margin:0">
+
+        <label style="font-size:13px;display:flex;align-items:center;gap:8px;font-weight:bold;">
+          <img class="om-emoji" src="/openmoji/1F4F1.svg" alt="📱"> 手机竖屏壁纸
+        </label>
+        <input type="url" id="cfg-bgMobile" placeholder="输入图片直链 (留空恢复默认)" style="margin:0">
+
+        <div style="background:rgba(0,0,0,0.02);padding:12px;border-radius:10px;border:1px solid var(--cd)">
+          <label style="font-size:13px;display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" id="cfg-expect" style="width:auto;margin:0"> 终端 CLI 附加 Expect: 100-continue 头
+          </label>
+          <p style="font-size:11px;color:gray;margin:6px 0 0 24px">某些防火墙或网关遇到此头会报 417 错误，取消勾选即可跳过此协议握手。</p>
+        </div>
+
+        <div style="background:rgba(0,0,0,0.02);padding:12px;border-radius:10px;border:1px solid var(--cd)">
+          <label style="font-size:13px;display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" id="cfg-sha256" style="width:auto;margin:0"> 启用强哈希运算防断流 (前端)
+          </label>
+          <p style="font-size:11px;color:gray;margin:6px 0 0 24px">在前端计算 SHA256 确保完整性。注意：极度耗费手机/低端机 CPU 甚至可能导致崩溃，请谨慎开启。</p>
+        </div>
+
+        <button id="save-cfg-btn" class="btn btn-success" style="width:100%;font-size:15px;padding:12px;" onclick="app.saveSettingsFromUI()">
+          <img class="om-emoji" src="/openmoji/1F4BE.svg" alt="💾"> 保存并同步云端配置
+        </button>
+
+        <button class="btn btn-outline" style="width:100%;margin-top:6px;padding:12px;border-radius:12px" onclick="app.closeModal('modal-settings')">
+          <img class="om-emoji" src="/openmoji/274C.svg" alt="❌"> 关闭
+        </button>
+      </div>
+    </div>
   </div>
 
   <script src="/js/app.js"></script>
