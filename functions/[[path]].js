@@ -135,7 +135,88 @@ function getShareIconSvg(name) {
 
 function rSP(f, o, p, cfg) {
   const ext = f.name.split('.').pop().toLowerCase(), sp = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'ico'].includes(ext), s = escapeHTML(f.name), w = p ? '&pwd=' + encodeURIComponent(p) : '';
-  return '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>' + s + ' - 糖糖云盘</title><link rel="stylesheet" href="/css/style.css"><style>:root{--bgc:#ffffff;--tx:#1e293b;--cb:rgba(255,255,255,0.65);--cd:rgba(0,0,0,0.08)}body{font-family:-apple-system,sans-serif;background-color:var(--bgc);color:var(--tx);margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh}.c{background:var(--cb);padding:30px;border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,0.06);border:1px solid var(--cd);text-align:center;max-width:400px;width:90%;backdrop-filter:blur(16px) saturate(150%);-webkit-backdrop-filter:blur(16px) saturate(150%)}img{max-width:100%;border-radius:12px;box-shadow:0 4px 15px rgba(0,0,0,0.1)}.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:12px 24px;background:#3b82f6;color:#fff;text-decoration:none;border-radius:10px;margin-top:20px;font-weight:bold;transition:0.3s}.btn:hover{transform:scale(1.05);background:#2563eb;box-shadow:0 8px 20px rgba(59,130,246,0.3)}</style></head><body>' + getBgLayer(cfg) + '<div class="c"><div style="margin:10px auto 15px auto;display:flex;align-items:center;justify-content:center;">' + (sp ? '<img src="' + o + '/file/' + f.id + (w ? '?' + w.slice(1) : '') + '">' : getShareIconSvg(f.name)) + '</div><h3>' + s + '</h3><p style="color:gray;font-size:14px;">' + (f.size / 1048576).toFixed(2) + ' MB</p><a href="' + o + '/file/' + f.id + '?dl=1' + w + '" class="btn"><img class="om-emoji" src="/openmoji/1F4E5.svg" alt="📥"> 立即下载</a></div></body></html>';
+  const dlUrl = o + '/file/' + f.id + '?dl=1' + w;
+  const fSize = Number(f.size) || 0;
+  const fSizeStr = (fSize / 1048576).toFixed(2) + ' MB';
+  return '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>' + s + ' - 糖糖云盘</title><link rel="stylesheet" href="/css/style.css"><style>:root{--bgc:#ffffff;--tx:#1e293b;--cb:rgba(255,255,255,0.65);--cd:rgba(0,0,0,0.08)}body{font-family:-apple-system,sans-serif;background-color:var(--bgc);color:var(--tx);margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh}.c{background:var(--cb);padding:30px;border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,0.06);border:1px solid var(--cd);text-align:center;max-width:400px;width:90%;backdrop-filter:blur(16px) saturate(150%);-webkit-backdrop-filter:blur(16px) saturate(150%)}img{max-width:100%;border-radius:12px;box-shadow:0 4px 15px rgba(0,0,0,0.1)}.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:12px 24px;border-radius:10px;font-weight:bold;transition:0.3s;box-sizing:border-box}.btn:hover{transform:scale(1.02)}</style></head><body>' + getBgLayer(cfg) + '<div class="c"><div style="margin:10px auto 15px auto;display:flex;align-items:center;justify-content:center;">' + (sp ? '<img src="' + o + '/file/' + f.id + (w ? '?' + w.slice(1) : '') + '">' : getShareIconSvg(f.name)) + '</div><h3>' + s + '</h3><p style="color:gray;font-size:14px;margin-bottom:15px">' + fSizeStr + '</p><div style="display:flex;flex-direction:column;gap:10px"><button class="btn btn-fast-dl" onclick="smartDl()"><img class="om-emoji" src="/openmoji/26A1.svg" alt="⚡"> 疾速下载</button><a href="' + dlUrl + '" class="btn btn-outline" style="text-decoration:none"><img class="om-emoji" src="/openmoji/1F4E5.svg" alt="📥"> 原生下载</a></div></div><script>' +
+  'const FILE = { name: ' + JSON.stringify(f.name) + ', size: ' + fSize + ', url: ' + JSON.stringify(dlUrl) + ' };' +
+  'function formatBytes(b) { if (!b) return "0 B"; const k = 1024, s = ["B", "KB", "MB", "GB", "TB"], i = Math.floor(Math.log(b) / Math.log(k)); return parseFloat((b / Math.pow(k, i)).toFixed(2)) + " " + s[i]; }' +
+  'function copyTxt(t) { if (navigator.clipboard && window.isSecureContext) { navigator.clipboard.writeText(t).catch(() => prompt("复制:", t)); } else { const a = document.createElement("textarea"); a.value = t; document.body.appendChild(a); a.select(); try { document.execCommand("copy"); } catch(e){} a.remove(); } }' +
+  'let currAbort = null;' +
+  'function closeModal(id) { const m = document.getElementById(id); if (m) m.remove(); }' +
+  'function smartDl() {' +
+  '  const S20 = 20971520, S500 = 524288000;' +
+  '  if (FILE.size < S20) {' +
+  '    const a = document.createElement("a"); a.href = FILE.url; a.download = FILE.name; a.target = "_blank"; document.body.appendChild(a); a.click(); a.remove(); return;' +
+  '  }' +
+  '  if (FILE.size >= S20 && FILE.size <= S500) return dlMemory();' +
+  '  if (FILE.size > S500) {' +
+  '    if (typeof window.showSaveFilePicker === "function") return dlStream();' +
+  '    copyTxt(FILE.url);' +
+  '    return showTpModal();' +
+  '  }' +
+  '}' +
+  'function dlMemory() {' +
+  '  const m = document.createElement("div"); m.className = "modal-overlay"; m.id = "dlM";' +
+  '  m.innerHTML = \'<div class="modal-content" style="max-width:380px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><h3 style="margin:0;font-size:15px;display:flex;align-items:center;gap:6px"><img class="om-emoji" src="/openmoji/26A1.svg" alt="⚡"> 内存多线程疾速下载</h3><span class="dl-stat-badge">4 线程并发</span></div><div style="font-size:12px;color:gray;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:bold;margin-bottom:12px;">\' + FILE.name + \'</div><div class="progress-container" style="height:12px;margin-top:0"><div id="dl-bar" class="progress-bar" style="width:0%"></div></div><div style="display:flex;justify-content:space-between;font-size:12px;margin-top:8px;font-weight:bold"><span id="dl-status" style="color:#3b82f6">分片准备中...</span><span id="dl-speed" style="color:#10b981">0.0 MB/s</span></div><div style="display:flex;justify-content:space-between;font-size:11px;color:gray;margin-top:4px"><span id="dl-bytes">0 B / \' + formatBytes(FILE.size) + \'</span><span id="dl-pct">0%</span></div><div style="display:flex;gap:10px;margin-top:14px"><button class="btn btn-sm btn-outline flex-1" onclick="if(currAbort)currAbort.abort();closeModal(\\\'dlM\\\')">取消</button></div></div>\';' +
+  '  document.body.appendChild(m);' +
+  '  const tc = 4, cs = Math.ceil(FILE.size / tc), chunks = new Array(tc);' +
+  '  let db = 0, st = Date.now(); currAbort = new AbortController();' +
+  '  const upd = () => {' +
+  '    const p = Math.min(Math.round((db / FILE.size) * 100), 100), el = (Date.now() - st) / 1000;' +
+  '    const sp = el > 0 ? (db / 1048576 / el).toFixed(1) : "0.0";' +
+  '    const b = document.getElementById("dl-bar"), s = document.getElementById("dl-status"), spd = document.getElementById("dl-speed"), by = document.getElementById("dl-bytes"), pc = document.getElementById("dl-pct");' +
+  '    if (b) b.style.width = p + "%"; if (s) s.innerText = p >= 100 ? "拼装 Blob 中..." : "多线程接收中..."; if (spd) spd.innerText = sp + " MB/s"; if (by) by.innerText = formatBytes(db) + " / " + formatBytes(FILE.size); if (pc) pc.innerText = p + "%";' +
+  '  };' +
+  '  const tasks = Array.from({ length: tc }, (_, i) => {' +
+  '    const s = i * cs, e = Math.min(s + cs - 1, FILE.size - 1);' +
+  '    if (s > e) { chunks[i] = new Blob([]); return Promise.resolve(); }' +
+  '    return fetch(FILE.url, { headers: { Range: "bytes=" + s + "-" + e }, signal: currAbort.signal }).then(async r => {' +
+  '      const rd = r.body.getReader(), pBufs = [];' +
+  '      while (true) { const { done, value } = await rd.read(); if (done) break; pBufs.push(value); db += value.length; upd(); }' +
+  '      chunks[i] = new Blob(pBufs);' +
+  '    });' +
+  '  });' +
+  '  Promise.all(tasks).then(() => {' +
+  '    const b = new Blob(chunks, { type: "application/octet-stream" }); chunks.length = 0;' +
+  '    const u = URL.createObjectURL(b), a = document.createElement("a"); a.href = u; a.download = FILE.name; document.body.appendChild(a); a.click(); a.remove();' +
+  '    setTimeout(() => URL.revokeObjectURL(u), 30000); closeModal("dlM");' +
+  '  }).catch(e => {' +
+  '    if (e.name !== "AbortError") { alert("分片失败，转原生下载"); window.open(FILE.url, "_blank"); }' +
+  '    closeModal("dlM");' +
+  '  });' +
+  '}' +
+  'async function dlStream() {' +
+  '  let h; try { h = await window.showSaveFilePicker({ suggestedName: FILE.name }); } catch(e){ return; }' +
+  '  let w; try { w = await h.createWritable(); } catch(e){ alert("创建文件失败"); return; }' +
+  '  const m = document.createElement("div"); m.className = "modal-overlay"; m.id = "dlM";' +
+  '  m.innerHTML = \'<div class="modal-content" style="max-width:380px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><h3 style="margin:0;font-size:15px;display:flex;align-items:center;gap:6px"><img class="om-emoji" src="/openmoji/26A1.svg" alt="⚡"> 磁盘流式直写下载</h3><span class="dl-stat-badge">零内存占用</span></div><div style="font-size:12px;color:gray;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:bold;margin-bottom:12px;">\' + FILE.name + \'</div><div class="progress-container" style="height:12px;margin-top:0"><div id="dl-bar" class="progress-bar" style="width:0%"></div></div><div style="display:flex;justify-content:space-between;font-size:12px;margin-top:8px;font-weight:bold"><span id="dl-status" style="color:#3b82f6">直写硬盘中...</span><span id="dl-speed" style="color:#10b981">0.0 MB/s</span></div><div style="display:flex;justify-content:space-between;font-size:11px;color:gray;margin-top:4px"><span id="dl-bytes">0 B / \' + formatBytes(FILE.size) + \'</span><span id="dl-pct">0%</span></div><div style="display:flex;gap:10px;margin-top:14px"><button class="btn btn-sm btn-outline flex-1" onclick="if(currAbort)currAbort.abort();closeModal(\\\'dlM\\\')">取消</button></div></div>\';' +
+  '  document.body.appendChild(m);' +
+  '  const tc = 4, cs = Math.ceil(FILE.size / tc); let db = 0, st = Date.now(), wQ = Promise.resolve(); currAbort = new AbortController();' +
+  '  const safeW = (pos, buf) => { wQ = wQ.then(() => w.write({ type: "write", position: pos, data: buf })); return wQ; };' +
+  '  const upd = () => {' +
+  '    const p = Math.min(Math.round((db / FILE.size) * 100), 100), el = (Date.now() - st) / 1000;' +
+  '    const sp = el > 0 ? (db / 1048576 / el).toFixed(1) : "0.0";' +
+  '    const b = document.getElementById("dl-bar"), spd = document.getElementById("dl-speed"), by = document.getElementById("dl-bytes"), pc = document.getElementById("dl-pct");' +
+  '    if (b) b.style.width = p + "%"; if (spd) spd.innerText = sp + " MB/s"; if (by) by.innerText = formatBytes(db) + " / " + formatBytes(FILE.size); if (pc) pc.innerText = p + "%";' +
+  '  };' +
+  '  const tasks = Array.from({ length: tc }, (_, i) => {' +
+  '    const s = i * cs, e = Math.min(s + cs - 1, FILE.size - 1);' +
+  '    if (s > e) return Promise.resolve();' +
+  '    let cur = s;' +
+  '    return fetch(FILE.url, { headers: { Range: "bytes=" + s + "-" + e }, signal: currAbort.signal }).then(async r => {' +
+  '      const rd = r.body.getReader();' +
+  '      while (true) { const { done, value } = await rd.read(); if (done) break; await safeW(cur, value); cur += value.length; db += value.length; upd(); }' +
+  '    });' +
+  '  });' +
+  '  Promise.all(tasks).then(async () => { await wQ; await w.close(); closeModal("dlM"); alert("磁盘直写完成！"); }).catch(async e => { try{await w.abort();}catch(_){} if(e.name !== "AbortError") { alert("直写失败，转原生下载"); window.open(FILE.url, "_blank"); } closeModal("dlM"); });' +
+  '}' +
+  'function showTpModal() {' +
+  '  const m = document.createElement("div"); m.className = "modal-overlay"; m.id = "tpM";' +
+  '  m.innerHTML = \'<div class="modal-content" style="max-width:400px"><div style="text-align:center;margin-bottom:10px"><h3 style="margin:0;font-size:17px;display:flex;align-items:center;justify-content:center;gap:6px"><img class="om-emoji om-emoji-lg" src="/openmoji/1F680.svg" alt="🚀"> 超大文件加速下载指引</h3><p style="color:gray;font-size:12px;margin:8px 0 0">检测到文件大小为 <b style="color:#3b82f6">\' + formatBytes(FILE.size) + \'</b>（大于 500MB）</p></div><div style="background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.25);padding:12px;border-radius:12px;margin-bottom:12px;font-size:13px;color:#065f46;display:flex;align-items:center;gap:8px"><img class="om-emoji" src="/openmoji/2705.svg" alt="✅"><span><b>已自动将文件高速直链复制到剪贴板！</b></span></div><p style="font-size:12px;color:gray;margin:0 0 10px;line-height:1.6">当前浏览器环境暂不支持本地磁盘流式直写，直接读入内存会导致网页闪退。强烈建议粘贴剪贴板直链至专业多线程工具下载：</p><div style="display:flex;flex-direction:column;gap:8px;margin-bottom:15px"><div class="app-badge-item">💻 <b>Windows / Mac</b>: IDM / Motrix / FDM / 迅雷</div><div class="app-badge-item">📱 <b>手机端 (iOS / Android)</b>: IDM+ / 迅雷 / 闪电下载</div></div><div style="display:flex;flex-direction:column;gap:8px"><button class="btn btn-success" style="width:100%;padding:12px" onclick="copyTxt(FILE.url);alert(\\\'已重新复制直链！\\\')"><img class="om-emoji" src="/openmoji/1F4CB.svg" alt="📋"> 再次复制直链</button><a href="\' + FILE.url + \'" class="btn btn-outline" target="_blank" style="text-decoration:none;padding:12px" onclick="closeModal(\\\'tpM\\\')"><img class="om-emoji" src="/openmoji/1F4E5.svg" alt="📥"> 仍尝试浏览器原生下载</a><button class="btn btn-outline" style="padding:10px" onclick="closeModal(\\\'tpM\\\')">关闭</button></div></div>\';' +
+  '  document.body.appendChild(m);' +
+  '}' +
+  '</script></body></html>';
 }
 
 export async function onRequest(context) {
@@ -246,6 +327,8 @@ export async function onRequest(context) {
     const rh = new Headers(rs.headers);
     rh.set('Content-Disposition', (U.searchParams.get('dl') === '1' ? 'attachment' : 'inline') + "; filename*=UTF-8''" + encodeURIComponent(f.name));
     rh.set('Access-Control-Allow-Origin', '*');
+    rh.set('Access-Control-Expose-Headers', 'Content-Range, Accept-Ranges, Content-Length, Content-Disposition');
+    rh.set('Access-Control-Allow-Headers', 'Range, If-None-Match, If-Modified-Since, Content-Type');
     if (!rh.has('Accept-Ranges')) rh.set('Accept-Ranges', 'bytes');
     rh.delete('Content-Encoding');
     if ([200, 206].includes(rs.status)) rh.set('Cache-Control', 'public, max-age=2592000, no-transform');

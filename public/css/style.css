@@ -413,3 +413,39 @@ input:focus {
   height: 1.55em;
   vertical-align: -0.32em;
 }
+
+.btn-fast-dl {
+  background: linear-gradient(135deg, #3b82f6, #6366f1);
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
+  border: none;
+}
+
+.btn-fast-dl:hover {
+  background: linear-gradient(135deg, #2563eb, #4f46e5);
+  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.5);
+}
+
+.dl-stat-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(59, 130, 246, 0.1);
+  color: var(--primary);
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.app-badge-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.03);
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--cd);
+  font-size: 13px;
+  font-weight: 500;
+}
+
