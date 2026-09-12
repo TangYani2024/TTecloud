@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
   <title>登录 - 糖糖云盘</title>
+  <link rel="stylesheet" href="/css/style.css">
   <style>
     :root {
       --bgc: #ffffff;
@@ -67,7 +68,7 @@
 </head>
 <body>
   <div class="c">
-    <h2 style="margin-top:0;font-size:22px">🔐 管理员验证</h2>
+    <h2 style="margin-top:0;font-size:22px;display:flex;align-items:center;justify-content:center;gap:6px"><img class="om-emoji om-emoji-lg" src="/openmoji/1F510.svg" alt="🔐"> 管理员验证</h2>
     <p style="color:gray;font-size:13px;margin-bottom:20px">需要鉴权以访问核心控制面板</p>
     <form action="/login" method="post">
       <input name="username" placeholder="账号" required autocomplete="username">

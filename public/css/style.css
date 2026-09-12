@@ -398,3 +398,18 @@ input:focus {
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
+.om-emoji {
+  display: inline-block;
+  width: 1.25em;
+  height: 1.25em;
+  vertical-align: -0.22em;
+  margin: 0 0.15em;
+  object-fit: contain;
+}
+
+.om-emoji-lg {
+  width: 1.55em;
+  height: 1.55em;
+  vertical-align: -0.32em;
+}

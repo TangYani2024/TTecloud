@@ -306,7 +306,7 @@ const app = {
       document.getElementById('main-nav').style.display = rs.isAdmin ? 'flex' : 'none';
       document.getElementById('admin-panel').style.display = rs.isAdmin ? 'block' : 'none';
       document.getElementById('btn-back').style.display = this.state.folder ? 'inline-flex' : 'none';
-      document.getElementById('breadcrumb').innerText = this.state.folder ? '📂 ' + this.escapeHTML(this.state.folder) : '📁 根目录';
+      document.getElementById('breadcrumb').innerHTML = this.state.folder ? '<img class="om-emoji" src="/openmoji/1F4C2.svg" alt="📂"> ' + this.escapeHTML(this.state.folder) : '<img class="om-emoji" src="/openmoji/1F4C1.svg" alt="📁"> 根目录';
       
       if (rs.isAdmin) {
         document.getElementById('storage-card').style.display = 'block';
@@ -373,7 +373,7 @@ const app = {
            '<div class="file-name" title="' + sn + '">' + sn + '</div></div>' +
            '<div><div class="file-meta" style="margin-top:8px">' + f.count + ' 项 | ' + this.formatBytes(f.size) + '</div>';
       if (this.state.isAdmin) {
-        h += '<div style="margin-top:12px"><button class="btn btn-sm btn-outline" style="width:100%" data-f="' + sn + '" onclick="event.stopPropagation();app.adminFolder(this.dataset.f)">🔐 权限</button></div>';
+        h += '<div style="margin-top:12px"><button class="btn btn-sm btn-outline" style="width:100%" data-f="' + sn + '" onclick="event.stopPropagation();app.adminFolder(this.dataset.f)"><img class="om-emoji" src="/openmoji/1F510.svg" alt="🔐"> 权限</button></div>';
       }
       h += '</div></div>';
     });
@@ -382,8 +382,8 @@ const app = {
 
   toast(m) {
     const t = document.createElement('div');
-    t.innerText = m;
-    t.style.cssText = 'position:fixed;top:30px;left:50%;transform:translate(-50%,-20px);background:rgba(30,41,59,0.85);color:#fff;padding:12px 24px;border-radius:30px;font-size:14px;z-index:10000;box-shadow:0 10px 30px rgba(0,0,0,0.2);transition:all 0.4s;opacity:0;pointer-events:none;border:1px solid rgba(255,255,255,0.1);font-weight:bold';
+    t.innerHTML = m;
+    t.style.cssText = 'position:fixed;top:30px;left:50%;transform:translate(-50%,-20px);background:rgba(30,41,59,0.85);color:#fff;padding:12px 24px;border-radius:30px;font-size:14px;z-index:10000;box-shadow:0 10px 30px rgba(0,0,0,0.2);transition:all 0.4s;opacity:0;pointer-events:none;border:1px solid rgba(255,255,255,0.1);font-weight:bold;display:flex;align-items:center;gap:6px';
     document.body.appendChild(t);
     t.offsetHeight;
     t.style.opacity = '1';
@@ -397,7 +397,7 @@ const app = {
 
   copyText(txt) {
     if (navigator.clipboard && window.isSecureContext) {
-      navigator.clipboard.writeText(txt).then(() => this.toast('✅ 复制成功！')).catch(() => prompt('手动复制:', txt));
+      navigator.clipboard.writeText(txt).then(() => this.toast('<img class="om-emoji" src="/openmoji/2705.svg" alt="✅"> 复制成功！')).catch(() => prompt('手动复制:', txt));
     } else {
       const ta = document.createElement('textarea');
       ta.value = txt;
@@ -407,7 +407,7 @@ const app = {
       ta.select();
       try {
         document.execCommand('copy');
-        this.toast('✅ 复制成功！');
+        this.toast('<img class="om-emoji" src="/openmoji/2705.svg" alt="✅"> 复制成功！');
       } catch (e) {
         prompt('手动复制:', txt);
       }
@@ -460,19 +460,19 @@ const app = {
     let b = '';
     if (iv) {
       b += '<div id="primary-actions" class="flex-row" style="flex-wrap:wrap;width:100%">' +
-           '<button class="btn btn-outline flex-1" style="padding:12px" data-id="' + f.id + '" onclick="app.copyImgLink(this.dataset.id);app.closeModal(\'fM\')">🔗 复制直链</button>' +
-           '<button class="btn btn-outline flex-1" style="padding:12px" data-id="' + f.id + '" data-n="' + sn + '" onclick="app.copyImgMd(this.dataset.id,this.dataset.n);app.closeModal(\'fM\')">📝 Markdown</button>' +
-           '<a href="/file/' + f.id + '?dl=1' + pq + '" class="btn flex-1" target="_blank" style="text-decoration:none;padding:12px;font-size:14px;box-shadow:0 8px 20px rgba(59,130,246,0.3)" onclick="app.closeModal(\'fM\')">📥 下载</a>' +
-           '<button class="btn flex-1" style="padding:12px;background:#10b981" onclick="document.getElementById(\'primary-actions\').style.display=\'none\';document.getElementById(\'bg-options\').style.display=\'flex\'">🖼️ 设为壁纸</button>' +
+           '<button class="btn btn-outline flex-1" style="padding:12px" data-id="' + f.id + '" onclick="app.copyImgLink(this.dataset.id);app.closeModal(\'fM\')"><img class="om-emoji" src="/openmoji/1F517.svg" alt="🔗"> 复制直链</button>' +
+           '<button class="btn btn-outline flex-1" style="padding:12px" data-id="' + f.id + '" data-n="' + sn + '" onclick="app.copyImgMd(this.dataset.id,this.dataset.n);app.closeModal(\'fM\')"><img class="om-emoji" src="/openmoji/1F4DD.svg" alt="📝"> Markdown</button>' +
+           '<a href="/file/' + f.id + '?dl=1' + pq + '" class="btn flex-1" target="_blank" style="text-decoration:none;padding:12px;font-size:14px;box-shadow:0 8px 20px rgba(59,130,246,0.3)" onclick="app.closeModal(\'fM\')"><img class="om-emoji" src="/openmoji/1F4E5.svg" alt="📥"> 下载</a>' +
+           '<button class="btn flex-1" style="padding:12px;background:#10b981" onclick="document.getElementById(\'primary-actions\').style.display=\'none\';document.getElementById(\'bg-options\').style.display=\'flex\'"><img class="om-emoji" src="/openmoji/1F5BC.svg" alt="🖼️"> 设为壁纸</button>' +
            '</div>' +
            '<div id="bg-options" class="flex-row" style="display:none;flex-wrap:wrap;width:100%">' +
-           '<button class="btn btn-success flex-1" style="padding:12px" data-id="' + f.id + '" onclick="app.setWallpaper(this.dataset.id,\'pc\')">💻 设为 PC 横屏</button>' +
-           '<button class="btn btn-success flex-1" style="padding:12px" data-id="' + f.id + '" onclick="app.setWallpaper(this.dataset.id,\'mobile\')">📱 设为手机竖屏</button>' +
+           '<button class="btn btn-success flex-1" style="padding:12px" data-id="' + f.id + '" onclick="app.setWallpaper(this.dataset.id,\'pc\')"><img class="om-emoji" src="/openmoji/1F4BB.svg" alt="💻"> 设为 PC 横屏</button>' +
+           '<button class="btn btn-success flex-1" style="padding:12px" data-id="' + f.id + '" onclick="app.setWallpaper(this.dataset.id,\'mobile\')"><img class="om-emoji" src="/openmoji/1F4F1.svg" alt="📱"> 设为手机竖屏</button>' +
            '<button class="btn btn-outline flex-1" style="padding:12px" onclick="document.getElementById(\'bg-options\').style.display=\'none\';document.getElementById(\'primary-actions\').style.display=\'flex\'">取消</button>' +
            '</div>';
     } else {
-      b += '<a href="/file/' + f.id + '?dl=1' + pq + '" class="btn flex-1" target="_blank" style="text-decoration:none;padding:12px;font-size:14px;box-shadow:0 8px 20px rgba(59,130,246,0.3)" onclick="app.closeModal(\'fM\')">📥 下载</a>' +
-           '<a href="/share/' + f.id + ps + '" class="btn btn-outline flex-1" target="_blank" style="text-decoration:none;padding:12px;font-size:14px" onclick="app.closeModal(\'fM\')">📤 分享</a>';
+      b += '<a href="/file/' + f.id + '?dl=1' + pq + '" class="btn flex-1" target="_blank" style="text-decoration:none;padding:12px;font-size:14px;box-shadow:0 8px 20px rgba(59,130,246,0.3)" onclick="app.closeModal(\'fM\')"><img class="om-emoji" src="/openmoji/1F4E5.svg" alt="📥"> 下载</a>' +
+           '<a href="/share/' + f.id + ps + '" class="btn btn-outline flex-1" target="_blank" style="text-decoration:none;padding:12px;font-size:14px" onclick="app.closeModal(\'fM\')"><img class="om-emoji" src="/openmoji/1F4E4.svg" alt="📤"> 分享</a>';
     }
 
     let wgCmd = '', cuCmd = '';
@@ -482,18 +482,18 @@ const app = {
       cuCmd = atob('Y3VybCAtTCAtbyAi') + f.name + atob('IiAi') + dlUrl + atob('Ig==');
       b += '<div style="width:100%;height:1px;background:var(--cd);margin:10px 0;opacity:0.5"></div>' +
            '<div class="flex-row" style="flex-wrap:wrap;justify-content:center">' +
-           '<button id="cmd_wg_btn" class="btn btn-outline btn-sm flex-1">📋 复制 ' + atob('V2dldA==') + ' 下载</button>' +
-           '<button id="cmd_cu_btn" class="btn btn-outline btn-sm flex-1">📋 复制 ' + atob('Q3VybA==') + ' 下载</button>' +
+           '<button id="cmd_wg_btn" class="btn btn-outline btn-sm flex-1"><img class="om-emoji" src="/openmoji/1F4CB.svg" alt="📋"> 复制 ' + atob('V2dldA==') + ' 下载</button>' +
+           '<button id="cmd_cu_btn" class="btn btn-outline btn-sm flex-1"><img class="om-emoji" src="/openmoji/1F4CB.svg" alt="📋"> 复制 ' + atob('Q3VybA==') + ' 下载</button>' +
            '</div>' +
            '<div style="width:100%;height:1px;background:var(--cd);margin:10px 0;opacity:0.5"></div>' +
            '<div class="flex-row" style="flex-wrap:wrap;justify-content:center">' +
-           '<button class="btn btn-outline btn-sm flex-1" data-id="' + f.id + '" data-n="' + sn + '" onclick="app.adminAct(\'rename\',this.dataset.id,this.dataset.n);app.closeModal(\'fM\')">✏️ 重命名</button>' +
-           '<button class="btn btn-outline btn-sm flex-1" data-id="' + f.id + '" data-fd="' + this.escapeHTML(f.folder || '') + '" onclick="app.adminAct(\'move\',this.dataset.id,this.dataset.fd);app.closeModal(\'fM\')">✂️ 移动</button>' +
-           '<button class="btn ' + (f.is_hidden ? 'btn-warn' : 'btn-outline') + ' btn-sm flex-1" data-id="' + f.id + '" onclick="app.adminAct(\'toggle_hide\',this.dataset.id);app.closeModal(\'fM\')">👁️ 显隐</button>' +
-           '<button class="btn btn-danger btn-sm flex-1" data-id="' + f.id + '" onclick="app.adminAct(\'delete\',this.dataset.id);app.closeModal(\'fM\')">🗑️ 删除</button>' +
+           '<button class="btn btn-outline btn-sm flex-1" data-id="' + f.id + '" data-n="' + sn + '" onclick="app.adminAct(\'rename\',this.dataset.id,this.dataset.n);app.closeModal(\'fM\')"><img class="om-emoji" src="/openmoji/270F.svg" alt="✏️"> 重命名</button>' +
+           '<button class="btn btn-outline btn-sm flex-1" data-id="' + f.id + '" data-fd="' + this.escapeHTML(f.folder || '') + '" onclick="app.adminAct(\'move\',this.dataset.id,this.dataset.fd);app.closeModal(\'fM\')"><img class="om-emoji" src="/openmoji/2702.svg" alt="✂️"> 移动</button>' +
+           '<button class="btn ' + (f.is_hidden ? 'btn-warn' : 'btn-outline') + ' btn-sm flex-1" data-id="' + f.id + '" onclick="app.adminAct(\'toggle_hide\',this.dataset.id);app.closeModal(\'fM\')"><img class="om-emoji" src="/openmoji/1F441.svg" alt="👁️"> 显隐</button>' +
+           '<button class="btn btn-danger btn-sm flex-1" data-id="' + f.id + '" onclick="app.adminAct(\'delete\',this.dataset.id);app.closeModal(\'fM\')"><img class="om-emoji" src="/openmoji/1F5D1.svg" alt="🗑️"> 删除</button>' +
            '</div>';
     }
-    b += '<button class="btn btn-outline" style="width:100%;margin-top:10px;padding:12px;border-radius:12px" onclick="app.closeModal(\'fM\')">❌ 关闭面板</button>';
+    b += '<button class="btn btn-outline" style="width:100%;margin-top:10px;padding:12px;border-radius:12px" onclick="app.closeModal(\'fM\')"><img class="om-emoji" src="/openmoji/274C.svg" alt="❌"> 关闭面板</button>';
 
     const m = document.createElement('div');
     m.className = 'modal-overlay';
@@ -695,13 +695,13 @@ const app = {
     Object.values(this.activeControllers).forEach(c => {
       if (c) c.abort();
     });
-    document.getElementById('uploadStatus').innerText = '❌ 已强制中断';
+    document.getElementById('uploadStatus').innerHTML = '<img class="om-emoji" src="/openmoji/274C.svg" alt="❌"> 已强制中断';
     document.getElementById('uploadStatus').style.color = '#ef4444';
     setTimeout(() => {
       this.uploadQueue = [];
       document.getElementById('uploadProgress').style.display = 'none';
       document.getElementById('uploadBtn').style.display = 'flex';
-      document.getElementById('file-name-display').innerText = '➕ 点击选择多文件，或直接拖拽文件夹到此处';
+      document.getElementById('file-name-display').innerHTML = '<img class="om-emoji" src="/openmoji/2795.svg" alt="➕"> 点击选择多文件，或直接拖拽文件夹到此处';
       document.getElementById('queue-info').innerText = '完美支持多文件、多级文件夹拖拽识别并发';
       this.fetchData();
     }, 2000);
@@ -714,7 +714,7 @@ const app = {
     let total = this.uploadQueue.length, completed = 0;
     document.getElementById('uploadBtn').style.display = 'none';
     document.getElementById('uploadProgress').style.display = 'block';
-    document.getElementById('uploadStatus').innerText = '🔥 多线程队列处理中...';
+    document.getElementById('uploadStatus').innerHTML = '<img class="om-emoji" src="/openmoji/1F525.svg" alt="🔥"> 多线程队列处理中...';
     document.getElementById('uploadStatus').style.color = 'var(--primary)';
 
     const updateOverall = () => {
@@ -751,11 +751,11 @@ const app = {
     await Promise.all(activePromises);
 
     if (!this.cancelFlag) {
-      document.getElementById('uploadStatus').innerText = '🎉 队列全部完成！';
+      document.getElementById('uploadStatus').innerHTML = '<img class="om-emoji" src="/openmoji/1F389.svg" alt="🎉"> 队列全部完成！';
       setTimeout(() => {
         document.getElementById('uploadProgress').style.display = 'none';
         document.getElementById('uploadBtn').style.display = 'flex';
-        document.getElementById('file-name-display').innerText = '➕ 点击选择多文件，或直接拖拽文件夹到此处';
+        document.getElementById('file-name-display').innerHTML = '<img class="om-emoji" src="/openmoji/2795.svg" alt="➕"> 点击选择多文件，或直接拖拽文件夹到此处';
         document.getElementById('queue-info').innerText = '完美支持多文件、多级文件夹拖拽识别并发';
         this.fetchData();
       }, 2000);
@@ -782,7 +782,7 @@ const app = {
     const updateEl = (msg, pct, color) => {
       let st = el.querySelector('.q-status');
       if (st) {
-        st.innerText = msg;
+        st.innerHTML = msg;
         if (color) st.style.color = color;
       }
       if (pct !== undefined) {
@@ -818,7 +818,7 @@ const app = {
           };
           xhr.onload = () => {
             if (xhr.status >= 200 && xhr.status < 300) {
-              updateEl('✅ 完成', 100, '#10b981');
+              updateEl('<img class="om-emoji" src="/openmoji/2705.svg" alt="✅"> 完成', 100, '#10b981');
               resolve();
             } else {
               reject(new Error('失败'));
@@ -986,11 +986,11 @@ const app = {
           signal: ctrl.signal
         }, 30000);
         if (!fr.ok) throw new Error('合并失败');
-        updateEl('✅ 完成', 100, '#10b981');
+        updateEl('<img class="om-emoji" src="/openmoji/2705.svg" alt="✅"> 完成', 100, '#10b981');
       }
     } catch (err) {
-      if (err.name === 'AbortError' || this.cancelFlag) updateEl('❌ 已取消', 0, '#ef4444');
-      else updateEl('❌ 失败', 0, '#ef4444');
+      if (err.name === 'AbortError' || this.cancelFlag) updateEl('<img class="om-emoji" src="/openmoji/274C.svg" alt="❌"> 已取消', 0, '#ef4444');
+      else updateEl('<img class="om-emoji" src="/openmoji/274C.svg" alt="❌"> 失败', 0, '#ef4444');
     } finally {
       delete this.activeControllers[task.id];
     }
@@ -1003,9 +1003,9 @@ const app = {
     m.id = 'sM';
     m.style.opacity = '0';
     m.innerHTML = '<div class="modal-content" style="opacity:0;transform:scale(0.95) translateY(15px)">' +
-                  '<h3 style="margin-top:0;margin-bottom:5px;text-align:center">🧹 碎片管理</h3>' +
+                  '<h3 style="margin-top:0;margin-bottom:5px;text-align:center"><img class="om-emoji" src="/openmoji/1F9F9.svg" alt="🧹"> 碎片管理</h3>' +
                   '<div id="sL" style="max-height:45vh;overflow-y:auto;margin-bottom:15px;padding-right:5px">...</div>' +
-                  '<button class="btn btn-outline" style="width:100%;padding:12px;border-radius:12px" onclick="app.closeModal(\'sM\')">❌ 关闭</button>' +
+                  '<button class="btn btn-outline" style="width:100%;padding:12px;border-radius:12px" onclick="app.closeModal(\'sM\')"><img class="om-emoji" src="/openmoji/274C.svg" alt="❌"> 关闭</button>' +
                   '</div>';
     document.body.appendChild(m);
     document.body.classList.add('modal-open');
