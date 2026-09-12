@@ -1,13 +1,13 @@
 {
-  "name": "ziyuanzhan",
+  "name": "cloud",
   "version": "1.0.0",
   "description": "基于 Cloudflare Pages Functions + D1 + Backblaze B2 的现代化极速云盘与图床系统",
   "private": true,
   "scripts": {
     "dev": "wrangler pages dev public --d1=DB",
-    "deploy": "wrangler pages deploy public"
+    "deploy": "wrangler pages deploy public --project-name=cloud"
   },
   "devDependencies": {
-    "wrangler": "^4.0.0"
+    "wrangler": "^3.114.0"
   }
 }
