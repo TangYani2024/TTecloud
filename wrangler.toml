@@ -1,0 +1,18 @@
+name = "ziyuanzhan"
+compatibility_date = "2024-01-01"
+pages_build_output_dir = "public"
+
+# D1 数据库绑定（在 Pages 控制台或者本地运行通过以下绑定注入 DB）
+[[d1_databases]]
+binding = "DB"
+database_name = "ziyuanzhan-db"
+database_id = "your-d1-database-id-here"
+
+# 默认公开环境变量（敏感密钥请在 Cloudflare Pages 控制台的“设置 -> 环境变量”中配置为 Encrypted / Secret）
+[vars]
+ADMIN_USER = "admin"
+
+# 需要在控制台或 wrangler 中设置的敏感密钥（Secret）：
+# ADMIN_PASS: 管理员密码
+# B2_KEY_ID: Backblaze B2 Application Key ID
+# B2_APP_KEY: Backblaze B2 Application Key (Secret)

@@ -1,0 +1,500 @@
+const CONFIG = {
+  AUTH_COOKIE_NAME: 'TangYani_Admin_Token',
+  MAX_STORAGE_BYTES: 10737418240,
+  S3_REGION: 'us-east-005',
+  S3_ENDPOINT: 'https://s3.us-east-005.backblazeb2.com',
+  BUCKETS: { RESOURCE: 'tangyani-ziyuan', IMAGE: 'tangyani-tuchuang' }
+};
+
+let globalCachedTotalSize = 0, globalLastSizeCalcTime = 0;
+let globalSiteConfig = null, globalConfigTime = 0;
+
+async function getSiteConfig(e) {
+  if (Date.now() - globalConfigTime < 300000 && globalSiteConfig) return globalSiteConfig;
+  try {
+    const rs = await awsS3Fetch(CONFIG.S3_ENDPOINT + '/' + CONFIG.BUCKETS.RESOURCE + '/' + encodeURIComponent('.sys/__site_config__.json'), { method: 'GET' }, e);
+    if (rs.status === 200) {
+      globalSiteConfig = await rs.json();
+      globalConfigTime = Date.now();
+    } else {
+      globalSiteConfig = {};
+    }
+  } catch (err) {
+    if (!globalSiteConfig) globalSiteConfig = {};
+  }
+  return globalSiteConfig;
+}
+
+function getBgLayer(c) {
+  const cfg = c || globalSiteConfig || {};
+  const pc = (cfg.bgPc || cfg.bgMobile || '').trim();
+  const mb = (cfg.bgMobile || cfg.bgPc || '').trim();
+  if (!pc && !mb) return '';
+  return '<style>body{background-color:transparent!important;}.bg-layer{position:fixed;top:-5%;left:-5%;width:110vw;height:110vh;pointer-events:none;z-index:-3;background-size:cover;background-position:center;filter:blur(20px) brightness(1.05) saturate(110%);background-image:url("' + pc + '");}@media(max-width:768px){.bg-layer{background-image:url("' + mb + '");}}</style><div class="bg-layer"></div>';
+}
+
+function escapeHTML(s) {
+  return String(s).replace(/[&<>'"]/g, t => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[t] || t));
+}
+
+function awsUriEncode(s) {
+  return encodeURIComponent(s).replace(/[!'()*]/g, c => '%' + c.charCodeAt(0).toString(16).toUpperCase());
+}
+
+function timingSafeEqual(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
+  let r = 0;
+  for (let i = 0; i < a.length; i++) r |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return r === 0;
+}
+
+async function hashSha256(s) {
+  const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
+  return Array.from(new Uint8Array(d)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function hmacSha256(k, s) {
+  const c = await crypto.subtle.importKey('raw', typeof k === 'string' ? new TextEncoder().encode(k) : k, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  return new Uint8Array(await crypto.subtle.sign('HMAC', c, new TextEncoder().encode(s)));
+}
+
+async function createAdminToken(e) {
+  if (!e.ADMIN_PASS) throw new Error('No ADMIN_PASS');
+  const t = Date.now().toString(), d = (e.ADMIN_USER || 'admin') + '|' + t, s = Array.from(await hmacSha256(e.ADMIN_PASS, d)).map(b => b.toString(16).padStart(2, '0')).join('');
+  return encodeURIComponent(d + '|' + s);
+}
+
+async function verifyAdminToken(t, e, c) {
+  if (!t || !e.ADMIN_PASS) return false;
+  try {
+    const p = decodeURIComponent(t).split('|');
+    if (p.length !== 3) return false;
+    const u = p[0], tm = parseInt(p[1]), s = p[2];
+    if (Date.now() - tm > 2592000000) return false;
+    if (c && c.lastLogoutTime && tm < c.lastLogoutTime) return false;
+    const ex = Array.from(await hmacSha256(e.ADMIN_PASS, u + '|' + p[1])).map(b => b.toString(16).padStart(2, '0')).join('');
+    return timingSafeEqual(s, ex) && u === (e.ADMIN_USER || 'admin');
+  } catch (err) {
+    return false;
+  }
+}
+
+async function awsS3Fetch(u, o, e) {
+  const U = new URL(u), M = o.method || 'GET', amz = new Date().toISOString().replace(/[:-]|\.\d{3}/g, ''), dt = amz.slice(0, 8), rh = new Headers(o.headers || {}), sh = new Headers();
+  sh.set('host', U.host);
+  sh.set('x-amz-date', amz);
+  sh.set('x-amz-content-sha256', 'UNSIGNED-PAYLOAD');
+  const cu = decodeURIComponent(U.pathname).split('/').map(awsUriEncode).join('/').replace(/%2F/g, '/'), cq = Array.from(U.searchParams).sort(([a], [b]) => a < b ? -1 : 1).map(([k, v]) => awsUriEncode(k) + '=' + awsUriEncode(v)).join('&'), sk = Array.from(sh.keys()).sort(), ch = sk.map(k => k + ':' + sh.get(k) + '\n').join(''), ss = sk.join(';'), crh = await hashSha256(M + '\n' + cu + '\n' + cq + '\n' + ch + '\n' + ss + '\nUNSIGNED-PAYLOAD'), cs = dt + '/' + CONFIG.S3_REGION + '/s3/aws4_request', ks = await hmacSha256(await hmacSha256(await hmacSha256(await hmacSha256('AWS4' + e.B2_APP_KEY, dt), CONFIG.S3_REGION), 's3'), 'aws4_request'), sig = Array.from(await hmacSha256(ks, 'AWS4-HMAC-SHA256\n' + amz + '\n' + cs + '\n' + crh)).map(b => b.toString(16).padStart(2, '0')).join('');
+  rh.set('host', U.host);
+  rh.set('x-amz-date', amz);
+  rh.set('x-amz-content-sha256', 'UNSIGNED-PAYLOAD');
+  rh.set('Authorization', 'AWS4-HMAC-SHA256 Credential=' + e.B2_KEY_ID + '/' + cs + ', SignedHeaders=' + ss + ', Signature=' + sig);
+  return fetch(U.toString(), { ...o, headers: rh });
+}
+
+async function awsS3Presign(u, e, M = 'PUT', ex = 3600) {
+  const U = new URL(u), amz = new Date().toISOString().replace(/[:-]|\.\d{3}/g, ''), dt = amz.slice(0, 8), cs = dt + '/' + CONFIG.S3_REGION + '/s3/aws4_request';
+  U.searchParams.set('X-Amz-Algorithm', 'AWS4-HMAC-SHA256');
+  U.searchParams.set('X-Amz-Credential', e.B2_KEY_ID + '/' + cs);
+  U.searchParams.set('X-Amz-Date', amz);
+  U.searchParams.set('X-Amz-Expires', ex.toString());
+  U.searchParams.set('X-Amz-SignedHeaders', 'content-type;host');
+  const cu = decodeURIComponent(U.pathname).split('/').map(awsUriEncode).join('/').replace(/%2F/g, '/'), cq = Array.from(U.searchParams).sort(([a], [b]) => a < b ? -1 : 1).map(([k, v]) => awsUriEncode(k) + '=' + awsUriEncode(v)).join('&'), ch = 'content-type:application/octet-stream\nhost:' + U.host + '\n', crh = await hashSha256(M + '\n' + cu + '\n' + cq + '\n' + ch + '\ncontent-type;host\nUNSIGNED-PAYLOAD'), ks = await hmacSha256(await hmacSha256(await hmacSha256(await hmacSha256('AWS4' + e.B2_APP_KEY, dt), CONFIG.S3_REGION), 's3'), 'aws4_request'), sig = Array.from(await hmacSha256(ks, 'AWS4-HMAC-SHA256\n' + amz + '\n' + cs + '\n' + crh)).map(b => b.toString(16).padStart(2, '0')).join('');
+  U.searchParams.set('X-Amz-Signature', sig);
+  return U.toString();
+}
+
+function getS3Client(e) {
+  return { fetch: (u, o = {}) => awsS3Fetch(u, o, e) };
+}
+
+function rLP(cfg) {
+  return '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>登录 - 糖糖云盘</title><style>:root{--bgc:#ffffff;--tx:#1e293b;--cb:rgba(255,255,255,0.65);--cd:rgba(0,0,0,0.08)}body{font-family:-apple-system,sans-serif;background-color:var(--bgc);color:var(--tx);margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh}.c{background:var(--cb);padding:35px 25px;border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,0.06);width:90%;max-width:350px;border:1px solid var(--cd);text-align:center;backdrop-filter:blur(16px) saturate(150%);-webkit-backdrop-filter:blur(16px) saturate(150%)}input,button{width:100%;padding:14px;margin:10px 0;box-sizing:border-box;border-radius:12px;border:1px solid var(--cd);background:rgba(0,0,0,0.03);color:inherit;outline:none;font-size:15px;transition:0.3s}input:focus{border-color:#3b82f6;background:rgba(0,0,0,0.05)}button{background:#3b82f6;color:#fff;border:none;cursor:pointer;font-weight:bold;margin-top:15px}button:hover{background:#2563eb;transform:translateY(-2px)}</style></head><body>' + getBgLayer(cfg) + '<div class="c"><h2 style="margin-top:0;font-size:22px">🔐 管理员验证</h2><p style="color:gray;font-size:13px;margin-bottom:20px">需要鉴权以访问核心控制面板</p><form action="/login" method="post"><input name="username" placeholder="账号" required><input type="password" name="password" placeholder="密码" required><button type="submit">登 录</button></form><a href="/" style="display:inline-block;margin-top:15px;font-size:13px;color:gray;text-decoration:none;">&larr; 返回首页</a></div></body></html>';
+}
+
+function rR(m, u, cfg) {
+  return '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><meta http-equiv="refresh" content="1.5;url=' + u + '"><style>:root{--bgc:#ffffff;--tx:#1e293b;--cb:rgba(255,255,255,0.65);--cd:rgba(0,0,0,0.08)}body{font-family:-apple-system,sans-serif;background-color:var(--bgc);color:var(--tx);margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh}.c{background:var(--cb);padding:30px 40px;border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,0.06);border:1px solid var(--cd);text-align:center;backdrop-filter:blur(16px) saturate(150%);-webkit-backdrop-filter:blur(16px) saturate(150%)}</style></head><body>' + getBgLayer(cfg) + '<div class="c"><h2 style="margin:0">' + m + '</h2><p style="color:gray;font-size:14px;margin:15px 0 0">页面即将自动跳转...</p></div></body></html>';
+}
+
+function rSP(f, o, p, cfg) {
+  const ext = f.name.split('.').pop().toLowerCase(), sp = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'ico'].includes(ext), s = escapeHTML(f.name), w = p ? '&pwd=' + encodeURIComponent(p) : '';
+  return '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>' + s + ' - 糖糖云盘</title><style>:root{--bgc:#ffffff;--tx:#1e293b;--cb:rgba(255,255,255,0.65);--cd:rgba(0,0,0,0.08)}body{font-family:-apple-system,sans-serif;background-color:var(--bgc);color:var(--tx);margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh}.c{background:var(--cb);padding:30px;border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,0.06);border:1px solid var(--cd);text-align:center;max-width:400px;width:90%;backdrop-filter:blur(16px) saturate(150%);-webkit-backdrop-filter:blur(16px) saturate(150%)}img{max-width:100%;border-radius:12px;box-shadow:0 4px 15px rgba(0,0,0,0.1)}.btn{display:inline-block;padding:12px 24px;background:#3b82f6;color:#fff;text-decoration:none;border-radius:10px;margin-top:20px;font-weight:bold;transition:0.3s}.btn:hover{transform:scale(1.05);background:#2563eb;box-shadow:0 8px 20px rgba(59,130,246,0.3)}</style></head><body>' + getBgLayer(cfg) + '<div class="c">' + (sp ? '<img src="' + o + '/file/' + f.id + (w ? '?' + w.slice(1) : '') + '">' : '<h1 style="font-size:60px;margin:0;">📄</h1>') + '<h3>' + s + '</h3><p style="color:gray;font-size:14px;">' + (f.size / 1048576).toFixed(2) + ' MB</p><a href="' + o + '/file/' + f.id + '?dl=1' + w + '" class="btn">📥 立即下载</a></div></body></html>';
+}
+
+export async function onRequest(context) {
+  const { request: req, env: e, next } = context;
+  const U = new URL(req.url), P = U.pathname, C = req.headers.get('Cookie') || '';
+  const tM = C.match(new RegExp('(?:^|; )' + CONFIG.AUTH_COOKIE_NAME + '=([^;]*)'));
+  const aH = req.headers.get('Authorization');
+  const token = (aH && aH.startsWith('Bearer ')) ? aH.substring(7) : (tM ? tM[1] : null);
+  const cfg = await getSiteConfig(e);
+  const iA = await verifyAdminToken(token, e, cfg);
+
+  // 1. 根页面 SSR 注入云端配置
+  if (P === '/' || P === '/index.html') {
+    const res = await next();
+    if (res && res.status === 200) {
+      let html = await res.text();
+      html = html.replace('</head>', `<script>window.__CFG__=${JSON.stringify(cfg)};</script></head>`);
+      const h = new Headers(res.headers);
+      h.set('Content-Type', 'text/html;charset=UTF-8');
+      return new Response(html, { status: 200, headers: h });
+    }
+    return res;
+  }
+
+  // 2. 登录认证接口
+  if (P === '/login') {
+    if (req.method === 'GET') {
+      return new Response(rLP(cfg), { headers: { 'Content-Type': 'text/html;charset=UTF-8', 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
+    }
+    const isJsonReq = req.headers.get('Accept')?.includes('application/json');
+    const cType = req.headers.get('Content-Type') || '';
+    let u, p;
+    if (cType.includes('application/json')) {
+      const j = await req.json();
+      u = j.username;
+      p = j.password;
+    } else {
+      const fd = await req.formData();
+      u = fd.get('username');
+      p = fd.get('password');
+    }
+    const adminUser = e.ADMIN_USER || 'admin';
+    if (u === adminUser && p === e.ADMIN_PASS) {
+      const newToken = await createAdminToken(e);
+      if (isJsonReq) return Response.json({ ok: true, token: newToken, user: adminUser }, { status: 200 });
+      return new Response(rR('🎉 欢迎回来！', '/', cfg), {
+        headers: {
+          'Content-Type': 'text/html;charset=UTF-8',
+          'Cache-Control': 'no-store, no-cache, must-revalidate',
+          'Set-Cookie': CONFIG.AUTH_COOKIE_NAME + '=' + newToken + '; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=2592000'
+        }
+      });
+    }
+    if (isJsonReq) return Response.json({ ok: false, error: '身份校验失败' }, { status: 401 });
+    return new Response(rR('密码错误！', '/login', cfg), { headers: { 'Content-Type': 'text/html;charset=UTF-8', 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
+  }
+
+  // 3. 退出登录
+  if (P === '/logout') {
+    cfg.lastLogoutTime = Date.now();
+    globalSiteConfig = cfg;
+    globalConfigTime = Date.now();
+    await awsS3Fetch(CONFIG.S3_ENDPOINT + '/' + CONFIG.BUCKETS.RESOURCE + '/' + encodeURIComponent('.sys/__site_config__.json'), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cfg)
+    }, e);
+    return new Response(rR('已安全退出，所有设备已下线', '/', cfg), {
+      headers: {
+        'Content-Type': 'text/html;charset=UTF-8',
+        'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+        'Set-Cookie': CONFIG.AUTH_COOKIE_NAME + '=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT'
+      }
+    });
+  }
+
+  // 4. 分享链接页面
+  if (P.startsWith('/share/')) {
+    const { results: R } = await e.DB.prepare("SELECT * FROM files WHERE id=?").bind(P.split('/')[2]).all();
+    if (!R.length || (R[0].is_hidden === 1 && !iA)) return new Response('Not Found', { status: 404 });
+    return new Response(rSP(R[0], U.origin, U.searchParams.get('pwd') || '', cfg), { headers: { 'Content-Type': 'text/html;charset=UTF-8' } });
+  }
+
+  // 5. 文件下载与流式传输
+  if (P.startsWith('/file/')) {
+    const { results: R } = await e.DB.prepare("SELECT * FROM files WHERE id=?").bind(P.split('/')[2]).all();
+    if (!R.length) return new Response('404', { status: 404 });
+    const f = R[0];
+    if (f.is_hidden === 1 && !iA) return new Response('403', { status: 403 });
+    if (!iA && f.folder) {
+      const m = await e.DB.prepare("SELECT password FROM folder_meta WHERE name=?").bind(f.folder).first();
+      if (m && m.password) {
+        const uP = U.searchParams.get('pwd');
+        const lM = C.match(new RegExp('(?:^|; )lock_' + await hashSha256(f.folder) + '=([^;]*)'));
+        if ((!lM || decodeURIComponent(lM[1]) !== m.password) && uP !== m.password) return new Response('401', { status: 401 });
+      }
+    }
+    const sh = { 'Accept-Encoding': 'identity' };
+    if (req.headers.has('Range')) {
+      let r = req.headers.get('Range');
+      if (r.includes(',')) r = r.split(',')[0];
+      sh['Range'] = r;
+    }
+    if (req.headers.has('If-None-Match')) sh['If-None-Match'] = req.headers.get('If-None-Match');
+    if (req.headers.has('If-Modified-Since')) sh['If-Modified-Since'] = req.headers.get('If-Modified-Since');
+    const rs = await awsS3Fetch(CONFIG.S3_ENDPOINT + '/' + f.type + '/' + encodeURIComponent(f.b2_path), { headers: sh }, e);
+    if (rs.status === 304) return new Response(null, { status: 304, headers: { 'Cache-Control': 'public, max-age=2592000', 'ETag': rs.headers.get('ETag'), 'Access-Control-Allow-Origin': '*' } });
+    const rh = new Headers(rs.headers);
+    rh.set('Content-Disposition', (U.searchParams.get('dl') === '1' ? 'attachment' : 'inline') + "; filename*=UTF-8''" + encodeURIComponent(f.name));
+    rh.set('Access-Control-Allow-Origin', '*');
+    if (!rh.has('Accept-Ranges')) rh.set('Accept-Ranges', 'bytes');
+    rh.delete('Content-Encoding');
+    if ([200, 206].includes(rs.status)) rh.set('Cache-Control', 'public, max-age=2592000, no-transform');
+    return new Response(rs.body, { status: rs.status, headers: rh });
+  }
+
+  // 6. 后端 API 处理
+  if (P.startsWith('/api/')) {
+    try {
+      const isPublicApi = P === '/api/data' || P === '/api/unlock';
+      if (!isPublicApi && !iA) return Response.json({ ok: false, error: '未授权' }, { status: 401, headers: { 'Cache-Control': 'no-store' } });
+
+      if (P === '/api/admin/config') {
+        const bp = '.sys/__site_config__.json';
+        if (req.method === 'GET') {
+          const rs = await awsS3Fetch(CONFIG.S3_ENDPOINT + '/' + CONFIG.BUCKETS.RESOURCE + '/' + encodeURIComponent(bp), { method: 'GET' }, e);
+          if (rs.status === 200) return new Response(rs.body, { headers: { 'Content-Type': 'application/json' } });
+          return Response.json({});
+        }
+        if (req.method === 'POST') {
+          const txt = await req.text();
+          try {
+            globalSiteConfig = JSON.parse(txt);
+            globalConfigTime = Date.now();
+          } catch (err) {}
+          const rs = await awsS3Fetch(CONFIG.S3_ENDPOINT + '/' + CONFIG.BUCKETS.RESOURCE + '/' + encodeURIComponent(bp), {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: txt
+          }, e);
+          return Response.json({ ok: rs.ok });
+        }
+      }
+
+      if (P === '/api/data' && req.method === 'GET') {
+        const viewM = U.searchParams.get('view') || 'resource';
+        let bk = viewM === 'image' ? CONFIG.BUCKETS.IMAGE : CONFIG.BUCKETS.RESOURCE;
+        const tF = U.searchParams.get('folder'), q = U.searchParams.get('q') || '';
+        if (Date.now() - globalLastSizeCalcTime > 600000) {
+          globalCachedTotalSize = (await e.DB.prepare("SELECT SUM(size) as t FROM files").first())?.t || 0;
+          globalLastSizeCalcTime = Date.now();
+        }
+        if (!tF && !q) {
+          const { results: R } = await e.DB.prepare("SELECT f.folder, COUNT(f.id) as count, SUM(f.size) as size, m.password FROM files f LEFT JOIN folder_meta m ON f.folder = m.name WHERE f.type=? " + (iA ? '' : 'AND f.is_hidden=0') + " GROUP BY f.folder ORDER BY f.folder ASC").bind(bk).all();
+          return Response.json({
+            isAdmin: iA,
+            totalSize: globalCachedTotalSize,
+            maxSize: CONFIG.MAX_STORAGE_BYTES,
+            mode: 'folders',
+            data: R.map(r => ({ name: r.folder, count: r.count, size: r.size, locked: !!r.password }))
+          }, { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
+        }
+        let qry = "SELECT f.*, m.password FROM files f LEFT JOIN folder_meta m ON f.folder = m.name WHERE f.type=? " + (iA ? '' : 'AND f.is_hidden=0'), prm = [bk];
+        if (tF) { qry += " AND f.folder=?"; prm.push(tF); }
+        if (q) { qry += " AND f.name LIKE ?"; prm.push('%' + q + '%'); }
+        const { results: R } = await e.DB.prepare(qry + " ORDER BY f.upload_at DESC").bind(...prm).all();
+        let fF = [];
+        for (const f of R) {
+          if (!iA && f.password) {
+            const lM = C.match(new RegExp('(?:^|; )lock_' + await hashSha256(f.folder) + '=([^;]*)'));
+            if (!lM || decodeURIComponent(lM[1]) !== f.password) continue;
+          }
+          fF.push({ id: f.id, name: f.name, size: f.size, folder: f.folder, is_hidden: f.is_hidden, upload_at: f.upload_at });
+        }
+        return Response.json({
+          isAdmin: iA,
+          totalSize: globalCachedTotalSize,
+          maxSize: CONFIG.MAX_STORAGE_BYTES,
+          mode: 'files',
+          data: fF,
+          folderMeta: R.length ? !!R[0].password : false
+        }, { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
+      }
+
+      if (P === '/api/unlock') {
+        const { folder: f, password: p } = await req.json();
+        const m = await e.DB.prepare("SELECT password FROM folder_meta WHERE name=?").bind(f).first();
+        if (m && m.password === p) {
+          return Response.json({ ok: true }, { headers: { 'Set-Cookie': 'lock_' + await hashSha256(f) + '=' + encodeURIComponent(p) + '; Path=/; Secure; SameSite=Strict' } });
+        }
+        return Response.json({ ok: false, error: '密码错误' }, { status: 401 });
+      }
+
+      if (P === '/api/admin/cli_presign' && req.method === 'POST') {
+        const d = await req.json(), bk = d.type === 'image' ? CONFIG.BUCKETS.IMAGE : CONFIG.BUCKETS.RESOURCE;
+        const bp = Date.now() + '_' + d.filename.replace(/^.*[\\\/]/, '').replace(/[:*?"<>|]/g, '_');
+        const url = await awsS3Presign(CONFIG.S3_ENDPOINT + '/' + bk + '/' + encodeURIComponent(bp), e, 'PUT', 86400);
+        return Response.json({ url, b2Path: bp });
+      }
+
+      if (P === '/api/admin/action') {
+        const p = await req.json();
+        if (['delete', 'sync_d1_ghosts', 'sync_b2_orphans', 'clean_garbled', 'sync_b2_to_d1'].includes(p.action)) globalLastSizeCalcTime = 0;
+        if (p.action === 'rename') await e.DB.prepare("UPDATE files SET name=? WHERE id=?").bind(p.name, p.id).run();
+        if (p.action === 'move') await e.DB.prepare("UPDATE files SET folder=? WHERE id=?").bind(p.folder, p.id).run();
+        if (p.action === 'toggle_hide') await e.DB.prepare("UPDATE files SET is_hidden=CASE WHEN is_hidden=1 THEN 0 ELSE 1 END WHERE id=?").bind(p.id).run();
+        if (p.action === 'lock_folder') {
+          if (!p.password) await e.DB.prepare("DELETE FROM folder_meta WHERE name=?").bind(p.folder).run();
+          else await e.DB.prepare("INSERT OR REPLACE INTO folder_meta (name, password) VALUES (?, ?)").bind(p.folder, p.password).run();
+        }
+        if (p.action === 'delete') {
+          const f = await e.DB.prepare("SELECT b2_path, type FROM files WHERE id=?").bind(p.id).first();
+          if (f) {
+            await awsS3Fetch(CONFIG.S3_ENDPOINT + '/' + f.type + '/' + encodeURIComponent(f.b2_path), { method: 'DELETE' }, e);
+            await e.DB.prepare("DELETE FROM files WHERE id=?").bind(p.id).run();
+          }
+        }
+        if (['sync_d1_ghosts', 'sync_b2_orphans', 'sync_b2_to_d1'].includes(p.action)) {
+          const aw = getS3Client(e), vM = p.viewMode || 'resource', bk = vM === 'image' ? CONFIG.BUCKETS.IMAGE : CONFIG.BUCKETS.RESOURCE;
+          let s3 = [], iT = true, cT = '';
+          while (iT) {
+            let lU = CONFIG.S3_ENDPOINT + '/' + bk + '?list-type=2';
+            if (cT) lU += '&continuation-token=' + encodeURIComponent(cT);
+            const xml = await (await aw.fetch(lU)).text(), c = [...xml.matchAll(/<Contents>(.*?)<\/Contents>/gs)];
+            for (const x of c) {
+              const kM = x[1].match(/<Key>(.*?)<\/Key>/), lmM = x[1].match(/<LastModified>(.*?)<\/LastModified>/), szM = x[1].match(/<Size>(.*?)<\/Size>/);
+              if (kM) s3.push({
+                key: kM[1].replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'"),
+                lastModified: lmM ? new Date(lmM[1]).getTime() : Date.now(),
+                size: szM ? parseInt(szM[1]) : 0
+              });
+            }
+            const tM = xml.match(/<IsTruncated>(true|false)<\/IsTruncated>/);
+            iT = tM && tM[1] === 'true';
+            if (iT) {
+              const nM = xml.match(/<NextContinuationToken>(.*?)<\/NextContinuationToken>/);
+              if (nM) cT = nM[1];
+            }
+          }
+          if (p.action === 'sync_d1_ghosts') {
+            const sK = new Set(s3.map(o => o.key)), { results: R } = await e.DB.prepare("SELECT * FROM files WHERE type=?").bind(bk).all();
+            let dc = 0;
+            for (const f of R) {
+              if (!sK.has(f.b2_path)) {
+                await e.DB.prepare("DELETE FROM files WHERE id=?").bind(f.id).run();
+                dc++;
+              }
+            }
+            return Response.json({ ok: true, msg: '清理了 ' + dc + ' 个死链！' });
+          }
+          if (p.action === 'sync_b2_orphans') {
+            const fR = await e.DB.prepare("SELECT b2_path FROM files WHERE type=?").bind(bk).all();
+            const uR = await e.DB.prepare("SELECT b2_path FROM upload_sessions WHERE bucket=?").bind(bk).all();
+            const dK = new Set([...fR.results.map(r => r.b2_path), ...uR.results.map(r => r.b2_path)]);
+            let dc = 0, nw = Date.now();
+            for (const o of s3) {
+              if (!dK.has(o.key) && (nw - o.lastModified > 86400000)) {
+                await aw.fetch(CONFIG.S3_ENDPOINT + '/' + bk + '/' + encodeURIComponent(o.key), { method: 'DELETE' });
+                dc++;
+              }
+            }
+            return Response.json({ ok: true, msg: '清理了 ' + dc + ' 个游离文件！' });
+          }
+          if (p.action === 'sync_b2_to_d1') {
+            const fR = await e.DB.prepare("SELECT b2_path FROM files WHERE type=?").bind(bk).all();
+            const dK = new Set([...fR.results.map(r => r.b2_path)]);
+            let dc = 0, b = [];
+            for (const o of s3) {
+              if (!dK.has(o.key)) {
+                const fn = o.key.split('_').slice(1).join('_') || o.key;
+                b.push(e.DB.prepare("INSERT INTO files (id,name,b2_path,type,size,folder) VALUES (?,?,?,?,?,?)").bind(crypto.randomUUID(), fn, o.key, bk, o.size, 'B2直传同步'));
+                dc++;
+              }
+            }
+            if (b.length > 0) {
+              for (let i = 0; i < b.length; i += 50) await e.DB.batch(b.slice(i, i + 50));
+            }
+            return Response.json({ ok: true, msg: '成功将 ' + dc + ' 个 B2 游离文件同步归档至 [B2直传同步] 文件夹！' });
+          }
+        }
+        if (p.action === 'clean_garbled') {
+          const aw = getS3Client(e), { results: R } = await e.DB.prepare("SELECT * FROM files").all();
+          let dc = 0;
+          for (const f of R) {
+            if (f.b2_path && f.b2_path.includes('%')) {
+              await aw.fetch(CONFIG.S3_ENDPOINT + '/' + f.type + '/' + encodeURIComponent(f.b2_path), { method: 'DELETE' });
+              await e.DB.prepare("DELETE FROM files WHERE id=?").bind(f.id).run();
+              dc++;
+            }
+          }
+          return Response.json({ ok: true, msg: '清理了 ' + dc + ' 个乱码！' });
+        }
+        return Response.json({ ok: true });
+      }
+
+      if (P === '/api/upload/sessions') return Response.json((await e.DB.prepare("SELECT * FROM upload_sessions").all()).results);
+
+      if (P === '/api/upload/abort') {
+        const d = await req.json(), tp = d.type || 'resource', bk = tp === 'image' ? CONFIG.BUCKETS.IMAGE : CONFIG.BUCKETS.RESOURCE;
+        if (d.uploadId && d.b2Path) await awsS3Fetch(CONFIG.S3_ENDPOINT + '/' + bk + '/' + encodeURIComponent(d.b2Path) + '?uploadId=' + d.uploadId, { method: 'DELETE' }, e);
+        if (d.fileHash) await e.DB.prepare("DELETE FROM upload_sessions WHERE file_hash=?").bind(d.fileHash).run();
+        return Response.json({ ok: true });
+      }
+
+      if (P === '/api/upload/check') {
+        const s = await e.DB.prepare("SELECT * FROM upload_sessions WHERE file_hash=?").bind((await req.json()).fileHash).first();
+        return Response.json(s ? { exists: true, session: s } : { exists: false });
+      }
+
+      if (P === '/api/upload/single') {
+        const fn = decodeURIComponent(req.headers.get('x-filename')).replace(/^.*[\\\/]/, '').replace(/[:*?"<>|]/g, '_');
+        const bp = Date.now() + '_' + fn, tp = req.headers.get('x-type') || 'resource', bk = tp === 'image' ? CONFIG.BUCKETS.IMAGE : CONFIG.BUCKETS.RESOURCE;
+        const rs = await awsS3Fetch(CONFIG.S3_ENDPOINT + '/' + bk + '/' + encodeURIComponent(bp), {
+          method: 'PUT',
+          headers: { 'Content-Type': req.headers.get('content-type') || 'application/octet-stream', 'x-amz-content-sha256': 'UNSIGNED-PAYLOAD' },
+          body: req.body
+        }, e);
+        if (!rs.ok) throw new Error(await rs.text());
+        await e.DB.prepare("INSERT INTO files (id,name,b2_path,type,size,folder) VALUES (?,?,?,?,?,?)").bind(crypto.randomUUID(), fn, bp, bk, req.headers.get('content-length') || 0, decodeURIComponent(req.headers.get('x-folder'))).run();
+        globalLastSizeCalcTime = 0;
+        return Response.json({ ok: true });
+      }
+
+      if (P === '/api/upload/start') {
+        const d = await req.json();
+        d.filename = d.filename.replace(/^.*[\\\/]/, '').replace(/[:*?"<>|]/g, '_');
+        const bp = Date.now() + '_' + d.filename, tp = d.type || 'resource', bk = tp === 'image' ? CONFIG.BUCKETS.IMAGE : CONFIG.BUCKETS.RESOURCE;
+        const rs = await awsS3Fetch(CONFIG.S3_ENDPOINT + '/' + bk + '/' + encodeURIComponent(bp) + '?uploads', { method: 'POST', headers: { 'Content-Type': d.contentType } }, e);
+        if (!rs.ok) throw new Error(await rs.text());
+        const ui = (await rs.text()).match(/<UploadId>(.*?)<\/UploadId>/)[1];
+        await e.DB.prepare("INSERT OR REPLACE INTO upload_sessions (file_hash,b2_file_id,b2_path,bucket,folder,uploaded_parts) VALUES (?,?,?,?,?,'[]')").bind(d.fileHash, ui, bp, bk, d.folder).run();
+        return Response.json({ fileId: ui, b2Path: bp });
+      }
+
+      if (P === '/api/upload/presign_batch') {
+        const d = await req.json(), tp = d.type || 'resource', bk = tp === 'image' ? CONFIG.BUCKETS.IMAGE : CONFIG.BUCKETS.RESOURCE;
+        let u = {};
+        for (const p of d.parts) u[p] = await awsS3Presign(CONFIG.S3_ENDPOINT + '/' + bk + '/' + encodeURIComponent(d.b2Path) + '?partNumber=' + p + '&uploadId=' + d.uploadId, e, 'PUT', 86400);
+        return Response.json(u);
+      }
+
+      if (P === '/api/upload/sync_part') {
+        const d = await req.json();
+        await e.DB.prepare("UPDATE upload_sessions SET uploaded_parts=(SELECT json_group_array(json_object('partNumber',CAST(partNumber AS INTEGER),'etag',etag)) FROM (SELECT json_extract(value,'$.partNumber') as partNumber,json_extract(value,'$.etag') as etag FROM json_each(uploaded_parts) WHERE partNumber!=? UNION ALL SELECT ? as partNumber,? as etag)) WHERE file_hash=?").bind(d.partNumber, d.partNumber, d.etag, d.fileHash).run();
+        return Response.json({ ok: true });
+      }
+
+      if (P === '/api/upload/part') {
+        const h = { 'x-amz-content-sha256': 'UNSIGNED-PAYLOAD' };
+        if (req.headers.get('content-length')) h['Content-Length'] = req.headers.get('content-length');
+        const tp = req.headers.get('x-type') || 'resource', bk = tp === 'image' ? CONFIG.BUCKETS.IMAGE : CONFIG.BUCKETS.RESOURCE;
+        const rs = await awsS3Fetch(CONFIG.S3_ENDPOINT + '/' + bk + '/' + encodeURIComponent(decodeURIComponent(req.headers.get('x-b2-path'))) + '?partNumber=' + req.headers.get('x-part-number') + '&uploadId=' + req.headers.get('x-file-id'), { method: 'PUT', headers: h, body: req.body }, e);
+        if (!rs.ok) throw new Error(await rs.text());
+        const fh = req.headers.get('x-file-hash'), et = rs.headers.get('ETag').replace(/"/g, ''), pn = parseInt(req.headers.get('x-part-number'));
+        if (fh) await e.DB.prepare("UPDATE upload_sessions SET uploaded_parts=(SELECT json_group_array(json_object('partNumber',CAST(partNumber AS INTEGER),'etag',etag)) FROM (SELECT json_extract(value,'$.partNumber') as partNumber,json_extract(value,'$.etag') as etag FROM json_each(uploaded_parts) WHERE partNumber!=? UNION ALL SELECT ? as partNumber,? as etag)) WHERE file_hash=?").bind(pn, pn, et, fh).run();
+        return Response.json({ etag: et });
+      }
+
+      if (P === '/api/upload/finish') {
+        const d = await req.json();
+        const xml = '<CompleteMultipartUpload>' + d.etagArray.map((t, i) => '<Part><PartNumber>' + (i + 1) + '</PartNumber><ETag>' + t + '</ETag></Part>').join('') + '</CompleteMultipartUpload>';
+        const tp = d.type || 'resource', bk = tp === 'image' ? CONFIG.BUCKETS.IMAGE : CONFIG.BUCKETS.RESOURCE;
+        const rs = await awsS3Fetch(CONFIG.S3_ENDPOINT + '/' + bk + '/' + encodeURIComponent(d.b2_path) + '?uploadId=' + d.fileId, { method: 'POST', body: xml }, e);
+        if (!rs.ok) throw new Error(await rs.text());
+        await e.DB.prepare("INSERT INTO files (id,name,b2_path,type,size,folder) VALUES (?,?,?,?,?,?)").bind(crypto.randomUUID(), d.name, d.b2_path, bk, d.size, d.folder).run();
+        if (d.fileHash) await e.DB.prepare("DELETE FROM upload_sessions WHERE file_hash=?").bind(d.fileHash).run();
+        globalLastSizeCalcTime = 0;
+        return Response.json({ ok: true });
+      }
+
+      return Response.json({ ok: false, error: '接口不存在' }, { status: 404 });
+    } catch (err) {
+      return Response.json({ ok: false, error: err.message }, { status: 500 });
+    }
+  }
+
+  // 7. 其余静态请求（CSS/JS/图片等）直接交由 Pages CDN
+  return next();
+}
