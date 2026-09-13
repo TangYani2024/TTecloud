@@ -101,7 +101,12 @@
         <h3 style="margin:0;font-size:17px;display:flex;align-items:center;gap:6px">
           <img class="om-emoji" src="/openmoji/1F680.svg" alt="🚀"> 高速入库上传
         </h3>
-        <button type="button" class="btn btn-sm btn-outline" style="padding:4px 10px;border-radius:8px" onclick="app.closeModal('modal-upload')">✕</button>
+        <button type="button" class="btn-modal-close-red" onclick="app.closeModal('modal-upload')" title="关闭">
+          <svg viewBox="0 0 24 24" width="14" height="14" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="18" x2="18" y2="6"></line>
+          </svg>
+        </button>
       </div>
 
       <div style="display:flex;flex-direction:column;gap:12px">
@@ -119,10 +124,6 @@
 
         <button id="uploadBtn" class="btn" onclick="app.startUploadQueue()" style="width:100%;font-size:16px;padding:14px">
           <img class="om-emoji" src="/openmoji/26A1.svg" alt="⚡"> 发起多线程疾速并发上传
-        </button>
-
-        <button class="btn btn-outline" style="width:100%;margin-top:6px;padding:12px;border-radius:12px" onclick="app.closeModal('modal-upload')">
-          <img class="om-emoji" src="/openmoji/274C.svg" alt="❌"> 关闭
         </button>
       </div>
     </div>
@@ -142,7 +143,12 @@
           </svg>
           终端 CLI 与数据维护
         </h3>
-        <button type="button" class="btn btn-sm btn-outline" style="padding:4px 10px;border-radius:8px" onclick="app.closeModal('modal-cli')">✕</button>
+        <button type="button" class="btn-modal-close-red" onclick="app.closeModal('modal-cli')" title="关闭">
+          <svg viewBox="0 0 24 24" width="14" height="14" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="18" x2="18" y2="6"></line>
+          </svg>
+        </button>
       </div>
 
       <!-- 数据维护操作区（原直传面板中的同步与清理按钮） -->
@@ -177,10 +183,6 @@
           <img class="om-emoji" src="/openmoji/1F4CB.svg" alt="📋"> 获取并复制 Curl 命令
         </button>
       </div>
-
-      <button class="btn btn-outline" style="width:100%;margin-top:6px;padding:12px;border-radius:12px" onclick="app.closeModal('modal-cli')">
-        <img class="om-emoji" src="/openmoji/274C.svg" alt="❌"> 关闭
-      </button>
     </div>
   </div>
 
@@ -191,7 +193,12 @@
         <h3 style="margin:0;font-size:17px;display:flex;align-items:center;gap:6px">
           <img class="om-emoji" src="/openmoji/2699.svg" alt="⚙️"> 进阶系统配置
         </h3>
-        <button type="button" class="btn btn-sm btn-outline" style="padding:4px 10px;border-radius:8px" onclick="app.closeModal('modal-settings')">✕</button>
+        <button type="button" class="btn-modal-close-red" onclick="app.closeModal('modal-settings')" title="关闭">
+          <svg viewBox="0 0 24 24" width="14" height="14" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="18" x2="18" y2="6"></line>
+          </svg>
+        </button>
       </div>
 
       <div style="display:flex;flex-direction:column;gap:12px">
@@ -222,77 +229,93 @@
         <button id="save-cfg-btn" class="btn btn-success" style="width:100%;font-size:15px;padding:12px;" onclick="app.saveSettingsFromUI()">
           <img class="om-emoji" src="/openmoji/1F4BE.svg" alt="💾"> 保存并同步云端配置
         </button>
-
-        <button class="btn btn-outline" style="width:100%;margin-top:6px;padding:12px;border-radius:12px" onclick="app.closeModal('modal-settings')">
-          <img class="om-emoji" src="/openmoji/274C.svg" alt="❌"> 关闭
-        </button>
       </div>
     </div>
   </div>
 
   <!-- GitHub Release 追更与同步弹窗 -->
   <div class="modal-overlay" id="modal-github" style="display:none;opacity:0;">
-    <div class="modal-content" style="max-width:520px;width:94%;max-height:85vh;overflow-y:auto;transform:scale(0.95) translateY(15px);opacity:0">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+    <div class="modal-content" style="max-width:580px;width:94%;max-height:85vh;overflow-y:auto;transform:scale(0.95) translateY(15px);opacity:0">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
         <h3 style="margin:0;font-size:17px;display:flex;align-items:center;gap:8px">
           <svg viewBox="0 0 98 96" width="22" height="22" style="fill:currentColor">
             <path fill-rule="evenodd" clip-rule="evenodd" d="M48.854 0C21.839 0 0 22 0 49.217c0 21.756 13.993 40.172 33.405 46.69 2.427.49 3.316-1.059 3.316-2.34 0-1.144-.043-4.178-.066-8.202-13.593 2.981-16.461-6.611-16.461-6.611-2.222-5.701-5.426-7.218-5.426-7.218-4.436-3.064.337-3 .337-3 4.908.348 7.491 5.087 7.491 5.087 4.364 7.546 11.45 5.367 14.24 4.105.441-3.19 1.705-5.367 3.104-6.601-10.852-1.245-22.261-5.474-22.261-24.369 0-5.385 1.907-9.788 5.044-13.238-.5-1.245-2.188-6.264.48-13.06 0 0 4.103-1.328 13.435 5.051a46.286 46.286 0 0 1 12.24-1.664c4.152.019 8.335.565 12.24 1.664 9.319-6.379 13.411-5.051 13.411-5.051 2.68 6.796.992 11.815.493 13.06 3.149 3.45 5.032 7.853 5.032 13.238 0 18.946-11.43 23.108-22.32 24.327 1.764 1.542 3.34 4.59 3.34 9.255 0 6.687-.06 12.083-.06 13.728 0 1.293.876 2.859 3.34 2.339C84.03 89.37 98 70.965 98 49.217 98 22 76.154 0 48.854 0z"/>
           </svg>
           GitHub 追更与云端同步
         </h3>
-        <button type="button" class="btn btn-sm btn-outline" style="padding:4px 10px;border-radius:8px" onclick="app.closeModal('modal-github')">✕</button>
-      </div>
-
-      <div id="gh-token-status" style="font-size:12px;margin-bottom:6px;padding:6px 10px;border-radius:8px;background:rgba(0,0,0,0.03);display:flex;align-items:center;gap:6px">
-        <span style="color:gray">正在检测 Cloudflare 环境变量...</span>
-      </div>
-
-      <!-- 添加/编辑任务表单 -->
-      <div style="background:rgba(0,0,0,0.02);padding:14px;border-radius:12px;border:1px solid var(--cd);display:flex;flex-direction:column;gap:10px">
-        <div style="font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:space-between">
-          <span id="gh-form-title">➕ 添加追更项目</span>
-          <button type="button" id="gh-cancel-edit-btn" class="btn btn-sm btn-outline" style="display:none;padding:2px 8px;font-size:11px" onclick="app.resetGithubForm()">取消编辑</button>
-        </div>
-        <input type="hidden" id="gh-rule-id">
-        <div>
-          <label style="font-size:12px;font-weight:bold;color:gray;display:block;margin-bottom:4px">GitHub 仓库 (例: topjohnwu/Magisk)</label>
-          <input type="text" id="gh-repo" placeholder="owner/repo 或完整 GitHub 链接..." style="margin:0">
-        </div>
-        <div>
-          <label style="font-size:12px;font-weight:bold;color:gray;display:block;margin-bottom:4px">保存至目录 (留空默认为项目名)</label>
-          <input type="text" id="gh-folder" placeholder="例如: Magisk (自动建立目录)" style="margin:0">
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-          <div>
-            <label style="font-size:12px;font-weight:bold;color:#10b981;display:block;margin-bottom:4px">正向包含词 (例: apk)</label>
-            <input type="text" id="gh-include" placeholder="留空不过滤，逗号分隔" style="margin:0;font-size:12px">
-          </div>
-          <div>
-            <label style="font-size:12px;font-weight:bold;color:#ef4444;display:block;margin-bottom:4px">负向排除词 (例: debug)</label>
-            <input type="text" id="gh-exclude" placeholder="留空不排除，逗号分隔" style="margin:0;font-size:12px">
-          </div>
-        </div>
-        <button type="button" class="btn btn-success" style="width:100%;padding:10px;font-size:13px;margin-top:2px" onclick="app.saveGithubRule()">
-          💾 保存追更配置
+        <button type="button" class="btn-modal-close-red" onclick="app.closeModal('modal-github')" title="关闭">
+          <svg viewBox="0 0 24 24" width="14" height="14" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="18" x2="18" y2="6"></line>
+          </svg>
         </button>
       </div>
 
-      <!-- 追更任务列表 -->
-      <div style="display:flex;flex-direction:column;gap:10px">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">
-          <span style="font-size:13px;font-weight:bold;">已订阅追更项目 (<span id="gh-count">0</span>)</span>
-          <button type="button" class="btn btn-sm btn-primary" onclick="app.syncAllGithubReleases()">
-            <img class="om-emoji" src="/openmoji/26A1.svg" alt="⚡"> 一键检查并追更全部
+      <!-- 顶部标签切换导航与状态 -->
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:2px">
+        <div class="gh-sub-nav">
+          <button type="button" id="gh-tab-list-btn" class="gh-nav-btn active" onclick="app.switchGithubTab('list')">
+            📋 订阅列表 (<span id="gh-count">0</span>)
+          </button>
+          <button type="button" id="gh-tab-form-btn" class="gh-nav-btn" onclick="app.switchGithubTab('form')">
+            ➕ 添加追更
           </button>
         </div>
-        <div id="gh-rules-list" style="max-height:280px;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding-right:2px">
+        <div id="gh-token-status" style="font-size:12px;padding:4px 10px;border-radius:20px;background:rgba(0,0,0,0.03);display:flex;align-items:center;gap:4px">
+          <span style="color:gray">检测环境变量中...</span>
+        </div>
+      </div>
+
+      <!-- 面板 1: 订阅任务列表 -->
+      <div id="gh-tab-list" style="display:flex;flex-direction:column;gap:10px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:2px">
+          <span style="font-size:12px;color:gray;">已配置的 GitHub 自动化任务：</span>
+          <button type="button" class="btn btn-sm btn-primary" style="padding:5px 12px;font-size:12px;" onclick="app.syncAllGithubReleases()">
+            <img class="om-emoji" src="/openmoji/26A1.svg" alt="⚡"> 一键检查追更全部
+          </button>
+        </div>
+        <div id="gh-rules-list" style="max-height:55vh;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding-right:2px;overscroll-behavior:contain;">
           <!-- 动态任务列表项 -->
         </div>
       </div>
 
-      <button class="btn btn-outline" style="width:100%;margin-top:6px;padding:12px;border-radius:12px" onclick="app.closeModal('modal-github')">
-        <img class="om-emoji" src="/openmoji/274C.svg" alt="❌"> 关闭
-      </button>
+      <!-- 面板 2: 添加/编辑任务表单 -->
+      <div id="gh-tab-form" style="display:none;flex-direction:column;gap:14px;padding:16px;background:rgba(0,0,0,0.02);border-radius:14px;border:1px solid var(--cd)">
+        <div style="font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:space-between">
+          <span id="gh-form-title">➕ 添加追更项目</span>
+          <button type="button" id="gh-cancel-edit-btn" class="btn btn-sm btn-outline" style="display:none;padding:3px 10px;font-size:11px" onclick="app.resetGithubForm();app.switchGithubTab('list')">返回列表</button>
+        </div>
+        <input type="hidden" id="gh-rule-id">
+        <div>
+          <label style="font-size:12px;font-weight:bold;color:var(--tx);display:block;margin-bottom:6px">GitHub 仓库</label>
+          <input type="text" id="gh-repo" placeholder="例如: topjohnwu/Magisk 或粘贴完整 GitHub 地址" style="margin:0;padding:11px 12px;font-size:13px">
+          <div style="font-size:11px;color:gray;margin-top:4px">支持 owner/repo 格式或完整 GitHub 链接</div>
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:bold;color:var(--tx);display:block;margin-bottom:6px">保存至网盘目录</label>
+          <input type="text" id="gh-folder" placeholder="例如: Magisk (留空默认使用仓库名)" style="margin:0;padding:11px 12px;font-size:13px">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div>
+            <label style="font-size:12px;font-weight:bold;color:#10b981;display:block;margin-bottom:6px">正向包含词 (选填)</label>
+            <input type="text" id="gh-include" placeholder="例如: apk, zip" style="margin:0;padding:10px 12px;font-size:12px">
+            <div style="font-size:11px;color:gray;margin-top:3px">只同步文件名包含任一词的附件</div>
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:bold;color:#ef4444;display:block;margin-bottom:6px">负向排除词 (选填)</label>
+            <input type="text" id="gh-exclude" placeholder="例如: debug, sha256" style="margin:0;padding:10px 12px;font-size:12px">
+            <div style="font-size:11px;color:gray;margin-top:3px">过滤忽略包含任一词的附件</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:6px">
+          <button type="button" class="btn btn-success flex-1" style="padding:12px;font-size:14px;font-weight:bold" onclick="app.saveGithubRule()">
+            💾 保存并应用配置
+          </button>
+          <button type="button" class="btn btn-outline" style="padding:12px 18px;font-size:14px" onclick="app.resetGithubForm();app.switchGithubTab('list')">
+            取消
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 

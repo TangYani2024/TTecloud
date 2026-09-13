@@ -122,6 +122,7 @@ const app = {
     const m = document.getElementById(id);
     if (!m) return;
     document.body.classList.add('modal-open');
+    document.documentElement.classList.add('modal-open');
     m.style.display = 'flex';
     m.style.opacity = '0';
     const mc = m.querySelector('.modal-content');
@@ -167,6 +168,27 @@ const app = {
 
   githubSyncRules: [],
 
+  githubTab: 'list',
+
+  switchGithubTab(tab) {
+    this.githubTab = tab;
+    const listPanel = document.getElementById('gh-tab-list');
+    const formPanel = document.getElementById('gh-tab-form');
+    const listBtn = document.getElementById('gh-tab-list-btn');
+    const formBtn = document.getElementById('gh-tab-form-btn');
+    if (tab === 'form') {
+      if (listPanel) listPanel.style.display = 'none';
+      if (formPanel) formPanel.style.display = 'flex';
+      if (listBtn) listBtn.classList.remove('active');
+      if (formBtn) formBtn.classList.add('active');
+    } else {
+      if (listPanel) listPanel.style.display = 'flex';
+      if (formPanel) formPanel.style.display = 'none';
+      if (listBtn) listBtn.classList.add('active');
+      if (formBtn) formBtn.classList.remove('active');
+    }
+  },
+
   showGithubModal() {
     this.openStaticModal('modal-github');
     this.loadGithubRules();
@@ -189,6 +211,11 @@ const app = {
           this.githubSyncRules = data.rules || [];
           this.hasGithubToken = !!data.hasToken;
         }
+        if (this.githubSyncRules.length === 0 && !document.getElementById('gh-rule-id').value) {
+          this.switchGithubTab('form');
+        } else {
+          this.switchGithubTab(this.githubTab || 'list');
+        }
         this.renderGithubRules();
       }
     } catch (e) {}
@@ -200,16 +227,21 @@ const app = {
     const tokenStatusEl = document.getElementById('gh-token-status');
     if (tokenStatusEl) {
       if (this.hasGithubToken) {
-        tokenStatusEl.innerHTML = '<span style="color:#10b981;font-weight:bold">🟢 Cloudflare 环境变量 GITHUB_TOKEN 已就绪 (享 5000次/小时 配额)</span>';
+        tokenStatusEl.innerHTML = '<span style="color:#10b981;font-weight:bold;display:inline-flex;align-items:center;gap:4px">🟢 GITHUB_TOKEN 就绪 (5000次/时)</span>';
       } else {
-        tokenStatusEl.innerHTML = '<span style="color:#f59e0b;font-weight:bold">⚠️ 未配置 GITHUB_TOKEN</span><span style="color:gray;font-size:11px">（请在 Cloudflare 后台设置环境变量 GITHUB_TOKEN 以防 403 限频）</span>';
+        tokenStatusEl.innerHTML = '<span style="color:#f59e0b;font-weight:bold;display:inline-flex;align-items:center;gap:4px">⚠️ 未配 TOKEN</span><span style="color:gray;font-size:11px">（防403限频）</span>';
       }
     }
     if (!listEl) return;
     const rules = this.githubSyncRules || [];
     if (countEl) countEl.innerText = rules.length;
     if (rules.length === 0) {
-      listEl.innerHTML = '<p style="text-align:center;color:gray;font-size:12px;margin:20px 0;">暂无追更项目，请在上方添加~</p>';
+      listEl.innerHTML = `<div style="text-align:center;padding:36px 16px;color:gray;background:rgba(0,0,0,0.02);border-radius:12px;border:1px dashed var(--cd)">
+        <div style="font-size:32px;margin-bottom:8px">📦</div>
+        <div style="font-size:14px;font-weight:bold;margin-bottom:6px;color:var(--tx)">暂无已订阅的 GitHub 项目</div>
+        <div style="font-size:12px;margin-bottom:16px;line-height:1.5">添加订阅后，系统将自动检测最新 Release 并同步到您的网盘</div>
+        <button type="button" class="btn btn-sm btn-primary" style="padding:6px 16px;font-size:13px" onclick="app.switchGithubTab('form')">➕ 立即添加追更项目</button>
+      </div>`;
       return;
     }
 
@@ -225,27 +257,27 @@ const app = {
       let excBadges = exc ? exc.split(/[,，\s]+/).filter(Boolean).map(w => `<span class="gh-badge gh-badge-exc">- ${this.escapeHTML(w)}</span>`).join(' ') : '';
 
       h += `<div class="gh-rule-card" id="gh-card-${rule.id}">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
-          <div style="font-weight:bold;font-size:14px;word-break:break-all">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
+          <div style="font-weight:bold;font-size:15px;word-break:break-all">
             <a href="https://github.com/${this.escapeHTML(rule.repo)}" target="_blank" style="color:var(--primary);text-decoration:none;display:inline-flex;align-items:center;gap:4px">
               ${this.escapeHTML(rule.repo)}
-              <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
             </a>
           </div>
           <span class="gh-badge gh-badge-tag">${this.escapeHTML(lastTag)}</span>
         </div>
-        <div style="font-size:12px;color:gray;display:flex;flex-wrap:wrap;align-items:center;gap:6px">
-          <span>📂 目录: <b>${this.escapeHTML(folder)}</b></span>
+        <div style="font-size:12px;color:gray;display:flex;flex-wrap:wrap;align-items:center;gap:8px">
+          <span>📂 存放目录: <b style="color:var(--tx)">${this.escapeHTML(folder)}</b></span>
           <span>•</span>
           <span>包含: ${incBadges}</span>
           ${excBadges ? `<span>•</span><span>排除: ${excBadges}</span>` : ''}
         </div>
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;padding-top:6px;border-top:1px solid var(--cd)">
-          <span class="gh-badge-time">🕒 更新: ${this.escapeHTML(lastTime)}</span>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;padding-top:8px;border-top:1px solid var(--cd);flex-wrap:wrap;gap:8px">
+          <span class="gh-badge-time">🕒 更新时间: ${this.escapeHTML(lastTime)}</span>
           <div style="display:flex;gap:6px">
-            <button class="btn btn-sm btn-outline" style="padding:4px 8px;font-size:11px" onclick="app.editGithubRule('${rule.id}')">✏️ 编辑</button>
-            <button class="btn btn-sm btn-danger" style="padding:4px 8px;font-size:11px" onclick="app.deleteGithubRule('${rule.id}')">🗑️</button>
-            <button class="btn btn-sm btn-success" style="padding:4px 10px;font-size:11px" onclick="app.syncGithubRelease('${rule.id}', true)">🔄 追更</button>
+            <button class="btn btn-sm btn-outline" style="padding:4px 10px;font-size:12px" onclick="app.editGithubRule('${rule.id}')">✏️ 编辑</button>
+            <button class="btn btn-sm btn-danger" style="padding:4px 10px;font-size:12px" onclick="app.deleteGithubRule('${rule.id}')">🗑️ 删除</button>
+            <button class="btn btn-sm btn-success" style="padding:4px 12px;font-size:12px;font-weight:bold" onclick="app.syncGithubRelease('${rule.id}', true)">🔄 追更</button>
           </div>
         </div>
       </div>`;
@@ -273,6 +305,7 @@ const app = {
     document.getElementById('gh-exclude').value = rule.exclude || '';
     document.getElementById('gh-form-title').innerText = '✏️ 编辑追更项目';
     document.getElementById('gh-cancel-edit-btn').style.display = 'inline-block';
+    this.switchGithubTab('form');
     const formEl = document.getElementById('gh-repo');
     if (formEl) formEl.focus();
   },
@@ -316,6 +349,7 @@ const app = {
         this.githubSyncRules = rules;
         this.renderGithubRules();
         this.resetGithubForm();
+        this.switchGithubTab('list');
         this.toast('✅ 追更配置已保存');
       } else {
         alert('保存失败');
@@ -521,13 +555,23 @@ const app = {
       }
     });
 
-    document.querySelectorAll('.modal-overlay').forEach(ov => {
-      ov.addEventListener('click', e => {
-        if (e.target === ov) {
-          app.closeModal(ov.id);
+    // 阻止弹窗外鼠标滚轮穿透到背后的文件列表
+    document.addEventListener('wheel', e => {
+      if (document.body.classList.contains('modal-open')) {
+        const mc = e.target.closest('.modal-content');
+        if (!mc) {
+          e.preventDefault();
+        } else {
+          const { scrollTop, scrollHeight, clientHeight } = mc;
+          const delta = e.deltaY;
+          const isAtTop = delta < 0 && scrollTop <= 0;
+          const isAtBottom = delta > 0 && scrollTop + clientHeight >= scrollHeight - 1;
+          if (isAtTop || isAtBottom) {
+            e.preventDefault();
+          }
         }
-      });
-    });
+      }
+    }, { passive: false });
   },
 
   refreshSettingsUI() {
@@ -888,6 +932,7 @@ const app = {
                   '</div>';
     document.body.appendChild(m);
     document.body.classList.add('modal-open');
+    document.documentElement.classList.add('modal-open');
 
     this.bindAdminCmdBtns(f);
 
@@ -991,6 +1036,7 @@ const app = {
         .filter(x => x.id !== id && x.style.display !== 'none');
       if (visibleOverlays.length === 0) {
         document.body.classList.remove('modal-open');
+        document.documentElement.classList.remove('modal-open');
       }
       const mc = m.querySelector('.modal-content');
       if (mc) mc.animate([{ transform: 'scale(1) translateY(0)', opacity: 1 }, { transform: 'scale(0.95) translateY(15px)', opacity: 0 }], { duration: 200, easing: 'ease-in', fill: 'forwards' });
@@ -1362,6 +1408,7 @@ const app = {
       '</div>';
     document.body.appendChild(m);
     document.body.classList.add('modal-open');
+    document.documentElement.classList.add('modal-open');
     const mc = m.querySelector('.modal-content');
     mc.style.willChange = 'transform, opacity';
     m.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, fill: 'forwards' });
@@ -1861,6 +1908,7 @@ const app = {
                   '</div>';
     document.body.appendChild(m);
     document.body.classList.add('modal-open');
+    document.documentElement.classList.add('modal-open');
 
     fetch('/api/upload/sessions')
       .then(r => r.json())
