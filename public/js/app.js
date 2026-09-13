@@ -1255,7 +1255,7 @@ const app = {
     Promise.all(tasks).then(() => {
       const st = document.getElementById('dl-status');
       if (st) {
-        st.innerHTML = '<img class="om-emoji" src="/openmoji/1F389.svg" alt="🎉"> 本地秒保存就绪！';
+        st.innerHTML = '本地秒保存成功！';
         st.style.color = '#10b981';
       }
       const act = document.getElementById('dl-actions');
@@ -1272,7 +1272,7 @@ const app = {
       a.click();
       a.remove();
       setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
-      this.toast('<img class="om-emoji" src="/openmoji/2705.svg" alt="✅"> 本地秒保存完成！');
+      this.toast('本地秒保存成功！');
     }).catch(err => {
       if (err.name === 'AbortError') {
         this.restoreFileActions(f.id);

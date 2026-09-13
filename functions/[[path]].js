@@ -225,7 +225,7 @@ function rSP(f, o, p, cfg) {
   '  });' +
   '  Promise.all(tasks).then(() => {' +
   '    const s = document.getElementById("dl-status"), act = document.getElementById("dl-actions");' +
-  '    if (s) { s.innerHTML = "<img class=\\\'om-emoji\\\' src=\\\'/openmoji/1F389.svg\\\' alt=\\\'🎉\\\'> 本地秒保存完成！"; s.style.color = "#10b981"; }' +
+  '    if (s) { s.innerHTML = "本地秒保存成功！"; s.style.color = "#10b981"; }' +
   '    if (act) act.innerHTML = "<button type=\\\'button\\\' class=\\\'btn btn-sm btn-success flex-1\\\' onclick=\\\'restoreShareActions()\\\'>下载完毕</button>";' +
   '    const b = new Blob(chunks, { type: "application/octet-stream" }); chunks.length = 0;' +
   '    const u = URL.createObjectURL(b), a = document.createElement("a"); a.href = u; a.download = FILE.name; document.body.appendChild(a); a.click(); a.remove();' +
