@@ -176,7 +176,10 @@ const app = {
 
   async loadGithubRules() {
     try {
-      const r = await fetch('/api/admin/github/rules');
+      const r = await fetch(`/api/admin/github/rules?t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache' }
+      });
       if (r.ok) {
         const data = await r.json();
         if (Array.isArray(data)) {
@@ -371,6 +374,10 @@ const app = {
 
       document.getElementById('uploadProgressBar').style.width = '100%';
       if (res.ok) {
+        if (res.tag) rule.lastTag = res.tag;
+        if (res.time) rule.lastUpdatedAt = res.time;
+        this.renderGithubRules();
+
         if (res.skipped) {
           document.getElementById('uploadStatus').innerHTML = `<img class="om-emoji" src="/openmoji/2705.svg" alt="✅"> ${this.escapeHTML(res.msg)}`;
           document.getElementById('uploadStatus').style.color = '#10b981';
@@ -436,6 +443,12 @@ const app = {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ruleId: r.id })
         })).json();
+
+        if (res.ok) {
+          if (res.tag) r.lastTag = res.tag;
+          if (res.time) r.lastUpdatedAt = res.time;
+          this.renderGithubRules();
+        }
 
         if (qRow) {
           const st = qRow.querySelector('.q-st');

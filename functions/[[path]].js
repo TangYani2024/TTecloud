@@ -9,8 +9,8 @@ const CONFIG = {
 let globalCachedTotalSize = 0, globalLastSizeCalcTime = 0;
 let globalSiteConfig = null, globalConfigTime = 0;
 
-async function getSiteConfig(e) {
-  if (Date.now() - globalConfigTime < 300000 && globalSiteConfig) return globalSiteConfig;
+async function getSiteConfig(e, force = false) {
+  if (!force && Date.now() - globalConfigTime < 300000 && globalSiteConfig) return globalSiteConfig;
   try {
     const rs = await awsS3Fetch(CONFIG.S3_ENDPOINT + '/' + CONFIG.BUCKETS.RESOURCE + '/' + encodeURIComponent('.sys/__site_config__.json'), { method: 'GET' }, e);
     if (rs.status === 200) {
@@ -411,11 +411,13 @@ export async function onRequest(context) {
 
       if (P === '/api/admin/github/rules') {
         const bp = '.sys/__site_config__.json';
-        const cfgData = await getSiteConfig(e);
+        const cfgData = await getSiteConfig(e, true);
         if (req.method === 'GET') {
           return Response.json({
             rules: cfgData.githubSyncRules || [],
             hasToken: !!(e.GITHUB_TOKEN || e.GH_TOKEN)
+          }, {
+            headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' }
           });
         }
         if (req.method === 'POST') {
@@ -428,20 +430,22 @@ export async function onRequest(context) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(cfgData)
           }, e);
-          return Response.json({ ok: rs.ok });
+          return Response.json({ ok: rs.ok }, {
+            headers: { 'Cache-Control': 'no-store' }
+          });
         }
       }
 
       if (P === '/api/admin/github/sync' && req.method === 'POST') {
         const bp = '.sys/__site_config__.json';
         const { ruleId, force } = await req.json();
-        const cfgData = await getSiteConfig(e);
+        const cfgData = await getSiteConfig(e, true);
         const rules = cfgData.githubSyncRules || [];
         const rule = rules.find(r => r.id === ruleId);
-        if (!rule) return Response.json({ ok: false, error: '未找到该追更任务' });
+        if (!rule) return Response.json({ ok: false, error: '未找到该追更任务' }, { headers: { 'Cache-Control': 'no-store' } });
 
         const cleanRepo = rule.repo.trim().replace(/^https?:\/\/github\.com\//, '').replace(/\/$/, '');
-        if (!cleanRepo || !cleanRepo.includes('/')) return Response.json({ ok: false, error: 'GitHub 仓库格式不正确 (例: owner/repo)' });
+        if (!cleanRepo || !cleanRepo.includes('/')) return Response.json({ ok: false, error: 'GitHub 仓库格式不正确 (例: owner/repo)' }, { headers: { 'Cache-Control': 'no-store' } });
 
         const ghHeaders = {
           'User-Agent': 'Cloudflare-Worker-TangYani-Drive',
@@ -458,12 +462,12 @@ export async function onRequest(context) {
         if (!ghRes.ok) {
           const errTxt = await ghRes.text();
           if (ghRes.status === 403 && !ghToken) {
-            return Response.json({ ok: false, error: 'GitHub 匿名 IP 限频，请在 Cloudflare 环境变量中添加 GITHUB_TOKEN' });
+            return Response.json({ ok: false, error: 'GitHub 匿名 IP 限频，请在 Cloudflare 环境变量中添加 GITHUB_TOKEN' }, { headers: { 'Cache-Control': 'no-store' } });
           }
           if (ghRes.status === 401) {
-            return Response.json({ ok: false, error: 'Cloudflare 环境变量 GITHUB_TOKEN 无效或过期' });
+            return Response.json({ ok: false, error: 'Cloudflare 环境变量 GITHUB_TOKEN 无效或过期' }, { headers: { 'Cache-Control': 'no-store' } });
           }
-          return Response.json({ ok: false, error: `GitHub API 错误 (${ghRes.status}): ${errTxt.slice(0, 100)}` });
+          return Response.json({ ok: false, error: `GitHub API 错误 (${ghRes.status}): ${errTxt.slice(0, 100)}` }, { headers: { 'Cache-Control': 'no-store' } });
         }
 
         const rel = await ghRes.json();
@@ -480,12 +484,26 @@ export async function onRequest(context) {
           return true;
         });
 
+        const now = new Date();
+        const pad = n => String(n).padStart(2, '0');
+        const timeStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+
         if (matchedAssets.length === 0) {
-          return Response.json({ ok: true, skipped: true, msg: `未找到符合正负词过滤的文件 (最新 Release 版本: ${tagName})` });
+          return Response.json({ ok: true, skipped: true, tag: tagName, time: rule.lastUpdatedAt || timeStr, msg: `未找到符合正负词过滤的文件 (最新 Release 版本: ${tagName})` }, { headers: { 'Cache-Control': 'no-store' } });
         }
 
         if (!force && rule.lastTag === tagName && rule.lastFiles && rule.lastFiles.length > 0) {
-          return Response.json({ ok: true, skipped: true, msg: `已是最新版本 (${tagName})，无需更新` });
+          if (!rule.lastUpdatedAt) {
+            rule.lastUpdatedAt = timeStr;
+            globalSiteConfig = cfgData;
+            globalConfigTime = Date.now();
+            await awsS3Fetch(CONFIG.S3_ENDPOINT + '/' + CONFIG.BUCKETS.RESOURCE + '/' + encodeURIComponent(bp), {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(cfgData)
+            }, e);
+          }
+          return Response.json({ ok: true, skipped: true, tag: tagName, time: rule.lastUpdatedAt || timeStr, msg: `已是最新版本 (${tagName})，无需更新` }, { headers: { 'Cache-Control': 'no-store' } });
         }
 
         const targetFolder = (rule.folder || cleanRepo.split('/')[1] || cleanRepo).trim();
@@ -522,22 +540,45 @@ export async function onRequest(context) {
         }
 
         // 追更成功后清理旧版本文件（同时清理 B2 存储与 D1 数据库记录）
+        // 1. 纳入原规则中记录的历史文件
+        // 2. 纳入 targetFolder 下所有同名旧文件（防止同名文件覆盖导致重复或残留）
+        const newFileIds = new Set(newFiles.map(f => f.id));
+        const filesToDelete = [];
+        const seenIds = new Set(newFileIds);
+
         if (rule.lastFiles && Array.isArray(rule.lastFiles)) {
           for (const old of rule.lastFiles) {
-            try {
-              if (old.b2_path) {
-                await awsS3Fetch(CONFIG.S3_ENDPOINT + '/' + (old.bucket || CONFIG.BUCKETS.RESOURCE) + '/' + encodeURIComponent(old.b2_path), { method: 'DELETE' }, e);
-              }
-              if (old.id) {
-                await e.DB.prepare("DELETE FROM files WHERE id=?").bind(old.id).run();
-              }
-            } catch (err) {}
+            if (old && old.id && !seenIds.has(old.id)) {
+              seenIds.add(old.id);
+              filesToDelete.push(old);
+            }
           }
         }
 
-        const now = new Date();
-        const pad = n => String(n).padStart(2, '0');
-        const timeStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+        for (const nf of newFiles) {
+          try {
+            const { results } = await e.DB.prepare("SELECT id, name, b2_path, type as bucket FROM files WHERE folder=? AND name=?").bind(targetFolder, nf.name).all();
+            if (results && results.length > 0) {
+              for (const r of results) {
+                if (r && r.id && !seenIds.has(r.id)) {
+                  seenIds.add(r.id);
+                  filesToDelete.push(r);
+                }
+              }
+            }
+          } catch (err) {}
+        }
+
+        for (const old of filesToDelete) {
+          try {
+            if (old.b2_path) {
+              await awsS3Fetch(CONFIG.S3_ENDPOINT + '/' + (old.bucket || CONFIG.BUCKETS.RESOURCE) + '/' + encodeURIComponent(old.b2_path), { method: 'DELETE' }, e);
+            }
+            if (old.id) {
+              await e.DB.prepare("DELETE FROM files WHERE id=?").bind(old.id).run();
+            }
+          } catch (err) {}
+        }
 
         rule.lastTag = tagName;
         rule.lastUpdatedAt = timeStr;
@@ -559,6 +600,8 @@ export async function onRequest(context) {
           time: timeStr,
           files: newFiles.map(f => f.name),
           msg: `成功更新 ${cleanRepo} (${tagName})，共同步 ${newFiles.length} 个文件至 [${targetFolder}]，旧版本已清理`
+        }, {
+          headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' }
         });
       }
 
