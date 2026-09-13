@@ -1559,7 +1559,7 @@ const app = {
 
   async generateCliUpload() {
     const fn = document.getElementById('cli-temp-name').value.trim();
-    if (!fn) return alert('请输入要上传的文件名');
+    if (!fn) return alert('请输入要上传的本地文件路径与文件名');
     try {
       const r = await fetch('/api/admin/cli_presign', {
         method: 'POST',
@@ -1570,7 +1570,7 @@ const app = {
       if (res.url) {
         const expHeader = this.settings.expect ? atob('LUggIkV4cGVjdSIsI') + '' : '';
         this.copyText(atob('Y3VybCAtIyAtWCBQVVQgLUggIkNvbnRlbnQtVHlwZTogYXBwbGljYXRpb24vb2N0ZXQtc3RyZWFtIiA=') + expHeader + atob('LVQgIg==') + fn + '" "' + res.url + '"');
-        alert('✅ 已生成并复制专属 ' + atob('Q3VybA==') + ' 命令！');
+        alert('✅ 已生成并复制专属 ' + atob('Q3VybA==') + ' 直传命令！在终端直接粘贴执行即可。');
       }
     } catch (e) {
       alert('生成失败');

@@ -90,7 +90,25 @@ body.modal-open .container {
   border-bottom: 1px solid var(--cd);
   padding-bottom: 10px;
   flex-wrap: wrap;
-  gap: 5px;
+  gap: 10px;
+}
+
+.header-title {
+  margin: 0;
+  font-size: 19px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .nav-tabs {
@@ -752,6 +770,35 @@ input:focus {
 }
 .btn-github-link:active {
   transform: scale(0.95);
+}
+
+/* 移动端排版优化，避免小屏幕顶部栏元素换行错位 */
+@media (max-width: 640px) {
+  .header {
+    gap: 8px;
+  }
+  .header-title {
+    font-size: 17px;
+    order: 1;
+  }
+  .header-right {
+    order: 2;
+    gap: 6px;
+  }
+  .header .nav-tabs {
+    order: 3;
+    width: 100%;
+    justify-content: center;
+    margin-top: 4px;
+  }
+  .header-right #auth-btn .btn {
+    padding: 5px 10px;
+    font-size: 12px;
+  }
+  .btn-github-link {
+    width: 31px;
+    height: 31px;
+  }
 }
 
 

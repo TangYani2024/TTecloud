@@ -112,7 +112,7 @@
 
 1. 登录 [Cloudflare 控制台](https://dash.cloudflare.com/)。
 2. 在左侧菜单点击 **Workers 和 Pages (Workers & Pages)**。
-3. 点击 **创建应用程序 (Create Application)** -> 切换顶部标签到 **Pages**。
+3. 点击 **创建应用程序 (Create Application)** -> 向下滚动在底部找到并选择 **Pages**。
 4. 点击 **连接到 Git (Connect to Git)**，选择并授权您刚刚 Fork 的 GitHub 仓库。
 5. 配置构建预设：
    - **项目名称**：自定义（如 `my-cloud`）
