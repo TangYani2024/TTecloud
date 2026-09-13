@@ -1,122 +1,213 @@
-# 糖糖云盘 (Cloudflare Pages 版)
+# 🍬 糖糖云盘 (TT-Cloud)
 
-基于 **Cloudflare Pages (Functions) + Cloudflare D1 数据库 + Backblaze B2 存储** 构建的高性能、极速分片直传的现代化云盘与图床系统。
+基于 **Cloudflare Pages (Functions) + Cloudflare D1 + S3 兼容对象存储 (Backblaze B2 / Cloudflare R2 / AWS S3 / MinIO 等)** 构建的现代化、极速、高颜值的开源私有网盘与图床系统。
 
-本项目已从单文件 Cloudflare Worker 成功解耦重构为标准 **Cloudflare Pages** 工程结构，前后端完全分离，便于后续维护开发与通过 Git 自动化部署。
+前后端完全解耦，0 服务器成本，纯边缘计算全球加速部署。
 
 ---
 
-## 📁 目录结构说明
+## 🌟 核心功能特性
+
+### 1. 🚀 大文件多线程分片直传 & 断点续传
+- **突破限制**：前端自动对大文件进行 10MB 分片直传 S3 存储桶，彻底绕过 Cloudflare 100MB 免费请求体大小限制，完美支持 GB 级超大文件。
+- **并发批量入库**：支持多文件、多层级文件夹直接拖拽识别与高并发并行上传。
+- **断点续传**：基于 D1 数据库动态维护上传会话与分片哈希，意外中断或页面刷新后再次上传同一文件，自动秒级跳过已传分片并断点续传。
+
+### 2. ⚡ 极速下载引擎 & 浏览器流式直写
+- **小文件极速拉取**：享受边缘 CDN 强力缓存与低延迟直链。
+- **大文件 10 线程并发下载**：独创前端 **10 线程 Range 分片并行下载** 技术，彻底榨干本地宽带峰值。
+- **磁盘流式写入（FileSystem Access API）**：超大文件直接边下载边落盘直写，不堆积浏览器内存，避免移动端或低配设备出现 OOM（内存溢出）崩溃。
+
+### 3. 🛠️ 全能管理员控制台 (Admin Control Suite)
+- **极简悬浮动作按钮 (FAB)**：右下角自适应动效圆钮，一键唤出管理控制台。
+- **临时预签名直传 (CLI Upload)**：
+  - 一键为指定文件名生成 24 小时有效的预签名 S3 PUT 直传命令。
+  - 在任何 Linux 服务器、macOS 或 Windows 终端无需安装任何客户端或配置秘钥，仅用系统自带的 `curl` 即可秒级直推文件入库。
+- **存储桶与 D1 数据一致性维护**：
+  - **同步 D1**：扫描存储桶已有物理文件，一键反向录入 D1 数据库。
+  - **碎片管理**：可视化查看所有未完成或废弃的分片上传残留，支持一键清空孤立碎片，杜绝空间占用与计费损耗。
+  - **清死链**：自动检测清理数据库存在但存储桶中已丢失的失效死链。
+  - **删游离**：自动检测清理存储桶存在但数据库中未记录的游离孤立文件。
+- **GitHub Release 自动追更与云端同步**：
+  - 订阅任意开源 GitHub 仓库（如 Magisk、v2rayN、Clash 等）。
+  - 支持正向包含词（如 `apk, zip`）与负向排除词（如 `debug, sha256`）精确过滤附件。
+  - 边缘函数自动定时或一键抓取最新版本并秒级同步到指定网盘目录。
+  - 自动清理旧版本物理文件与数据库记录，始终仅保留最新版本，防止存储空间膨胀。
+  - 深度支持 `GITHUB_TOKEN` 环境变量绑定，防范 GitHub 403 API 限频。
+- **文件与目录权限体系**：
+  - 支持单文件夹独立密码加密锁定与鉴权解锁。
+  - 文件重命名、跨目录穿梭移动、显隐状态一键切换、文件永久删除。
+  - 独立的单文件分享主页，一键生成复制直链与 Markdown 嵌入链接。
+- **个性化进阶系统配置**：
+  - 自定义 PC 端横屏背景壁纸与手机端竖屏背景壁纸。
+  - 终端 CLI 附加 `Expect: 100-continue` 握手协议开关（兼容特定防火墙）。
+  - 前端 SHA256 强哈希防断流校验开关。
+
+---
+
+## 🛠️ 准备工作
+
+在开始部署前，请确保准备好以下资源：
+
+1. **域名与 Cloudflare 账号**：
+   - 注册并登录 [Cloudflare](https://dash.cloudflare.com/) 账号。
+   - 准备一个托管在 Cloudflare 上的域名（如没有，也可以直接免费使用 Cloudflare Pages 赠送的 `*.pages.dev` 二级域名）。
+2. **支持 S3 协议的对象存储桶**：
+   - 本项目完全兼容标准 S3 协议，推荐选择：
+     - **Backblaze B2**（免费 10GB 存储，每天享有免费 3 倍流出流量，极力推荐）
+     - **Cloudflare R2**（免费 10GB 存储，0 出网流量费）
+     - **Amazon AWS S3**、**MinIO**（私有部署）、**Wasabi**、**阿里云 OSS / 腾讯云 COS**（开启 S3 兼容模式）
+   - 在对象存储中创建两个存储桶（可使用默认名称，也可以在 `config.json` 中自定义）：
+     - 资源桶（默认：`tangyani-ziyuan`）
+     - 图床桶（默认：`tangyani-tuchuang`）
+3. **获取存储桶 S3 API 凭证**：
+   - **Key ID / Access Key ID**
+   - **Application Key / Secret Access Key**
+   - 获取存储桶的 **S3 Endpoint 接入点**（如 B2 为 `https://s3.us-east-005.backblazeb2.com`，R2 为 `https://<account_id>.r2.cloudflarestorage.com`）与 **Region 区域**（如 `us-east-005`，R2 填 `auto`）。
+
+---
+
+## 📖 详细使用与部署教程
+
+### 第一步：Fork 本仓库
+点击本页面右上角的 **Fork** 按钮，将项目完整克隆到您自己的 GitHub 账号下。
+
+---
+
+### 第二步：配置 `config.json`
+在您 Fork 后的仓库根目录下，找到并编辑 `config.json` 文件：
+
+```json
+{
+  "site": {
+    "title": "糖糖云盘",
+    "cookieName": "TangYani_Admin_Token"
+  },
+  "s3": {
+    "endpoint": "https://s3.us-east-005.backblazeb2.com",
+    "region": "us-east-005",
+    "buckets": {
+      "resource": "tangyani-ziyuan",
+      "image": "tangyani-tuchuang"
+    }
+  },
+  "storage": {
+    "maxStorageBytes": 10737418240,
+    "maxStorageFormatted": "10 GB"
+  }
+}
+```
+
+- `s3.endpoint`：填写你的 S3 对象存储接入点 URL（结尾无需斜杠）。
+- `s3.region`：填写你的存储桶所属区域代码（如 `us-east-005`、`auto`、`us-east-1` 等）。
+- `s3.buckets.resource`：你的主资源存储桶名称。
+- `s3.buckets.image`：你的图床存储桶名称。
+- `storage.maxStorageBytes`：管理员控制台展示的总容量上限（单位：字节，例如 10GB 为 `10737418240`，20GB 为 `21474836480`）。
+
+修改完成后提交保存（Commit changes）。
+
+---
+
+### 第三步：在 Cloudflare 创建 Pages 项目
+
+1. 登录 [Cloudflare 控制台](https://dash.cloudflare.com/)。
+2. 在左侧菜单点击 **Workers 和 Pages (Workers & Pages)**。
+3. 点击 **创建应用程序 (Create Application)** -> 切换顶部标签到 **Pages**。
+4. 点击 **连接到 Git (Connect to Git)**，选择并授权您刚刚 Fork 的 GitHub 仓库。
+5. 配置构建预设：
+   - **项目名称**：自定义（如 `my-cloud`）
+   - **生产分支**：`main` 或 `master`
+   - **框架预设 (Framework preset)**：选择 **None (无)**
+   - **构建命令 (Build command)**：**留空不填**
+   - **构建输出目录 (Build output directory)**：填写 `public`
+6. 点击 **保存并部署 (Save and Deploy)**。
+
+---
+
+### 第四步：创建并绑定 Cloudflare D1 数据库
+
+1. 在 Cloudflare 左侧导航栏中，点击 **Workers 和 Pages** -> **D1 SQL 数据库**。
+2. 点击 **创建数据库**，输入数据库名称（如 `cloud-db`），点击创建。
+3. 进入刚刚创建的数据库，点击 **控制台 (Console)** 选项卡。
+4. 打开本项目仓库中的 [`schema.sql`](./schema.sql)，将全部 SQL 语句复制并粘贴进控制台中执行，完成核心数据表与索引的初始化：
+   - `files`：文件元数据与分类
+   - `folder_meta`：文件夹密码加密表
+   - `upload_sessions`：断点续传与碎片会话表
+5. **绑定至 Pages 项目**：
+   - 回到 **Workers 和 Pages** -> 点击进入你刚创建的 **Pages 项目**。
+   - 点击顶部 **设置 (Settings)** -> 左侧 **函数 (Functions)**。
+   - 向下滚动找到 **D1 数据库绑定 (D1 Database Bindings)**，点击 **添加绑定 (Add binding)**：
+     - **变量名称 (Variable name)**：`DB`（⚠️ 必须为大写的 `DB`，与后端代码完全一致）
+     - **D1 数据库**：下拉选择刚刚创建的 `cloud-db`
+   - 点击 **保存**。
+
+---
+
+### 第五步：设置环境变量与安全密钥
+
+在 Pages 项目的 **设置 (Settings)** -> **环境变量 (Environment Variables)** 中，点击 **添加变量**，添加以下参数：
+
+| 变量名 | 必填 | 类型 | 说明与示例 |
+| :--- | :---: | :---: | :--- |
+| `ADMIN_USER` | 否 | 文本 (Plain text) | 管理员登录账号（若不设置，默认值为 `admin`） |
+| `ADMIN_PASS` | **是** | 密钥 (Secret/加密) | 管理员登录强密码（必填） |
+| `B2_KEY_ID` 或 `S3_ACCESS_KEY_ID` | **是** | 密钥 (Secret/加密) | 存储桶的 Key ID / Access Key ID |
+| `B2_APP_KEY` 或 `S3_SECRET_ACCESS_KEY` | **是** | 密钥 (Secret/加密) | 存储桶的 Application Key / Secret Access Key |
+| `GITHUB_TOKEN` | 否 | 密钥 (Secret/加密) | GitHub Personal Access Token（用于自动追更时突破 API 速率限制至 5000次/小时） |
+
+> 💡 **提示**：环境变量中同时兼容 `B2_KEY_ID` 与标准 S3 的 `S3_ACCESS_KEY_ID`，您可根据习惯任意选用。
+
+---
+
+### 第六步：重新部署生效
+
+1. 进入 Pages 项目的 **部署 (Deployments)** 页面。
+2. 在最新一条部署记录右侧点击 `...` -> **重试部署 (Retry deployment)**。
+3. 等待约 10 秒部署完成，点击 Cloudflare 分配的 `https://<项目名>.pages.dev` 即可直接进入系统！
+4. （可选）在 **自定义域 (Custom Domains)** 页面绑定您自己的个性独立域名，自动享受全球 Anycast CDN 与 SSL 证书加速。
+
+---
+
+## 📂 仓库目录结构一览
 
 ```
 ziyuanzhan/
-├── public/                       # 静态资源根目录（由 Cloudflare 边缘 CDN 全球分发）
-│   ├── index.html                # 主页面 SPA 界面
-│   ├── login.html                # 管理员登录界面
-│   ├── css/
-│   │   └── style.css             # 前端样式表（结构化美化提取，可自由定制主题）
-│   └── js/
-│       └── app.js                # 前端业务核心逻辑（并发上传、分片计算、断点续传等）
-├── functions/                    # Cloudflare Pages Functions 后端云函数
-│   └── [[path]].js               # 全局路由处理器（处理 /api/*, /file/*, /share/*, /login 等）
-├── schema.sql                    # Cloudflare D1 数据库建表与索引脚本
-├── wrangler.toml                 # Wrangler 配置文件（定义 D1 binding 与构建目录）
-├── package.json                  # npm 配置文件与便捷脚本
-└── ziyuanzhan.js.bak             # 原 Worker 单文件备份
+├── config.json                   # 核心配置文件（S3 端点、存储桶、容量配额、站点信息）
+├── schema.sql                    # Cloudflare D1 数据库初始化与索引脚本
+├── package.json                  # 项目依赖与便捷脚本
+├── functions/                    # Cloudflare Pages Functions 后端边缘云函数
+│   └── [[path]].js               # 全局路由、AWS4 签名、S3 代理、D1 交互与追更引擎
+└── public/                       # 静态资源根目录（全球 CDN 边缘直发）
+    ├── index.html                # 主程序单页面 (SPA)
+    ├── login.html                # 独立管理员认证页
+    ├── css/
+    │   └── style.css             # 现代化玻璃拟态响应式样式表
+    ├── js/
+    │   └── app.js                # 前端核心业务引擎（分片计算、多线程直写、FAB 控制等）
+    └── openmoji/                 # 高清矢量 OpenMoji 表情与图标库
 ```
 
 ---
 
-## 🚀 部署指南
+## 常见问题 (FAQ)
 
-### 方式一：连接 GitHub 自动化部署（强烈推荐）
+<details>
+<summary><b>Q1: 上传大文件时会遇到 413 (Payload Too Large) 吗？</b></summary>
+不会。系统内置了自动分片直传逻辑，无论文件多大，均在浏览器本地切片为 10MB 分块直接向 S3 存储桶发起直传，绕过了任何反向代理网关的请求体限制。
+</details>
 
-1. **初始化并推送到 GitHub 仓库**：
-   在本地目录初始化 Git 仓库并推送到您的 GitHub / GitLab 账户：
-   ```bash
-   git init
-   git add .
-   git commit -m "Init Cloudflare Pages project"
-   git branch -M main
-   git remote add origin <您的仓库地址>
-   git push -u origin main
-   ```
+<details>
+<summary><b>Q2: 使用多线程极速下载时提示浏览器不受支持？</b></summary>
+「10 线程磁盘流式直写」基于 Chromium 原生的 FileSystem Access API（如 Chrome、Edge 等 PC 浏览器体验最佳）。在手机端 Safari 或不受支持的浏览器中，系统会自动智能降级为原生多线程下载或官方直链，确保 100% 可正常下载。
+</details>
 
-2. **在 Cloudflare 创建 Pages 项目**：
-   - 进入 [Cloudflare 控制台](https://dash.cloudflare.com/) -> **Workers 和 Pages** -> **创建应用程序** -> 选择 **Pages** -> **连接到 Git**。
-   - 选中刚创建的 GitHub 仓库并点击“开始设置”。
-   - **构建设置**：
-     - 框架预设（Framework preset）：**无（None）**
-     - 构建命令（Build command）：留空（不需要构建）
-     - 构建输出目录（Build output directory）：填写 `public`
-   - 点击 **保存并部署**。
-
-3. **配置 D1 数据库绑定（核心）**：
-   - 部署完成后，进入该 Pages 项目页面 -> **设置（Settings）** -> **函数（Functions）**。
-   - 向下滚动找到 **D1 数据库绑定（D1 Database Bindings）**，点击 **添加绑定（Add binding）**：
-     - **变量名称（Variable name）**：`DB` （必须大写，与代码严格一致）
-     - **D1 数据库**：选择您已有的云盘 D1 数据库（如果是新建数据库，请先执行 `schema.sql` 建表）。
-   - 点击保存。
-
-4. **配置环境变量与密钥（Environment Variables）**：
-   - 进入 **设置（Settings）** -> **环境变量（Environment Variables）** -> **添加变量**：
-     | 变量名 | 类型 | 说明 |
-     | :--- | :--- | :--- |
-     | `ADMIN_USER` | 文本 (Plain text) | 管理员登录账号（默认 `admin`） |
-     | `ADMIN_PASS` | 密钥 (Secret/加密) | 管理员登录密码 |
-     | `B2_KEY_ID` | 密钥 (Secret/加密) | Backblaze B2 Application Key ID |
-     | `B2_APP_KEY` | 密钥 (Secret/加密) | Backblaze B2 Application Key 密钥 |
-   - 点击保存。
-
-5. **重新部署生效**：
-   - 进入该 Pages 项目的 **部署（Deployments）** 选项卡。
-   - 点击最新部署右侧的 `...` -> **重试部署（Retry deployment）**，使新配置的环境变量与 D1 绑定生效。
+<details>
+<summary><b>Q3: GitHub 追更报 403 API rate limit exceeded？</b></summary>
+GitHub 匿名 API 限制每个 IP 每小时仅能请求 60 次，Cloudflare 边缘节点 IP 极易被限频。只需在 GitHub 生成一个无需勾选任何敏感权限的 Personal Access Token，填入环境变量 `GITHUB_TOKEN`，额度即可立刻提升至 5000 次/小时。
+</details>
 
 ---
 
-### 方式二：使用 Wrangler 命令行直接部署
+## 📄 开源许可证
 
-如果本地已配置 Node.js 和 Wrangler：
-
-1. **部署静态文件与 Functions**：
-   ```bash
-   npx wrangler pages deploy public
-   ```
-2. **设置敏感密钥**：
-   ```bash
-   npx wrangler pages secret put ADMIN_PASS --project-name ziyuanzhan
-   npx wrangler pages secret put B2_KEY_ID --project-name ziyuanzhan
-   npx wrangler pages secret put B2_APP_KEY --project-name ziyuanzhan
-   ```
-
----
-
-## 🗄️ 数据库说明 (`schema.sql`)
-
-如果您需要新建 D1 数据库或迁移数据，可以在本地通过 Wrangler 执行：
-
-```bash
-# 创建数据库（如果尚未创建）
-npx wrangler d1 create ziyuanzhan-db
-
-# 执行建表语句
-npx wrangler d1 execute ziyuanzhan-db --file=./schema.sql
-```
-
-数据表包含：
-- `files`：文件元数据（文件名、B2 存储路径、类型、大小、所属文件夹、显隐状态、上传时间）。
-- `folder_meta`：加密文件夹的独立密码信息。
-- `upload_sessions`：大文件分片并发直传状态中继表。
-
----
-
-## 🛠️ 后续维护与二次开发
-
-1. **修改前端样式与布局**：
-   直接编辑 `public/css/style.css` 或 `public/index.html`，享受完整的代码语法高亮与格式化，修改后 `git push` 即自动部署生效。
-2. **调整上传逻辑或前端组件**：
-   前端所有交互与并发调度代码集中在 `public/js/app.js` 中。
-3. **扩展后端接口**：
-   动态 API、下载流式中继与鉴权逻辑均在 `functions/[[path]].js` 中。
-4. **自定义域名绑定**：
-   在 Cloudflare Pages 项目的 **自定义域（Custom Domains）** 中，可一键绑定您的独立个性域名并自动享受免费的 SSL/TLS 证书。
+本项目基于 [MIT License](./LICENSE) 协议开源。

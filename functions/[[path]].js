@@ -1,9 +1,14 @@
+import appConfig from '../config.json';
+
 const CONFIG = {
-  AUTH_COOKIE_NAME: 'TangYani_Admin_Token',
-  MAX_STORAGE_BYTES: 10737418240,
-  S3_REGION: 'us-east-005',
-  S3_ENDPOINT: 'https://s3.us-east-005.backblazeb2.com',
-  BUCKETS: { RESOURCE: 'tangyani-ziyuan', IMAGE: 'tangyani-tuchuang' }
+  AUTH_COOKIE_NAME: (appConfig && appConfig.site && appConfig.site.cookieName) || (appConfig && appConfig.AUTH_COOKIE_NAME) || 'TangYani_Admin_Token',
+  MAX_STORAGE_BYTES: (appConfig && appConfig.storage && appConfig.storage.maxStorageBytes) || (appConfig && appConfig.MAX_STORAGE_BYTES) || 10737418240,
+  S3_REGION: (appConfig && appConfig.s3 && appConfig.s3.region) || (appConfig && appConfig.S3_REGION) || 'us-east-005',
+  S3_ENDPOINT: ((appConfig && appConfig.s3 && appConfig.s3.endpoint) || (appConfig && appConfig.S3_ENDPOINT) || 'https://s3.us-east-005.backblazeb2.com').replace(/\/+$/, ''),
+  BUCKETS: {
+    RESOURCE: (appConfig && appConfig.s3 && appConfig.s3.buckets && appConfig.s3.buckets.resource) || (appConfig && appConfig.BUCKETS && appConfig.BUCKETS.RESOURCE) || 'tangyani-ziyuan',
+    IMAGE: (appConfig && appConfig.s3 && appConfig.s3.buckets && appConfig.s3.buckets.image) || (appConfig && appConfig.BUCKETS && appConfig.BUCKETS.IMAGE) || 'tangyani-tuchuang'
+  }
 };
 
 let globalCachedTotalSize = 0, globalLastSizeCalcTime = 0;
@@ -106,25 +111,32 @@ async function verifyAdminToken(t, e, c) {
 
 async function awsS3Fetch(u, o, e) {
   const U = new URL(u), M = o.method || 'GET', amz = new Date().toISOString().replace(/[:-]|\.\d{3}/g, ''), dt = amz.slice(0, 8), rh = new Headers(o.headers || {}), sh = new Headers();
+  const keyId = e.S3_ACCESS_KEY_ID || e.B2_KEY_ID || e.S3_KEY_ID || '';
+  const appKey = e.S3_SECRET_ACCESS_KEY || e.B2_APP_KEY || e.S3_APP_KEY || '';
+  const region = e.S3_REGION || CONFIG.S3_REGION;
   sh.set('host', U.host);
   sh.set('x-amz-date', amz);
   sh.set('x-amz-content-sha256', 'UNSIGNED-PAYLOAD');
-  const cu = decodeURIComponent(U.pathname).split('/').map(awsUriEncode).join('/').replace(/%2F/g, '/'), cq = Array.from(U.searchParams).sort(([a], [b]) => a < b ? -1 : 1).map(([k, v]) => awsUriEncode(k) + '=' + awsUriEncode(v)).join('&'), sk = Array.from(sh.keys()).sort(), ch = sk.map(k => k + ':' + sh.get(k) + '\n').join(''), ss = sk.join(';'), crh = await hashSha256(M + '\n' + cu + '\n' + cq + '\n' + ch + '\n' + ss + '\nUNSIGNED-PAYLOAD'), cs = dt + '/' + CONFIG.S3_REGION + '/s3/aws4_request', ks = await hmacSha256(await hmacSha256(await hmacSha256(await hmacSha256('AWS4' + e.B2_APP_KEY, dt), CONFIG.S3_REGION), 's3'), 'aws4_request'), sig = Array.from(await hmacSha256(ks, 'AWS4-HMAC-SHA256\n' + amz + '\n' + cs + '\n' + crh)).map(b => b.toString(16).padStart(2, '0')).join('');
+  const cu = decodeURIComponent(U.pathname).split('/').map(awsUriEncode).join('/').replace(/%2F/g, '/'), cq = Array.from(U.searchParams).sort(([a], [b]) => a < b ? -1 : 1).map(([k, v]) => awsUriEncode(k) + '=' + awsUriEncode(v)).join('&'), sk = Array.from(sh.keys()).sort(), ch = sk.map(k => k + ':' + sh.get(k) + '\n').join(''), ss = sk.join(';'), crh = await hashSha256(M + '\n' + cu + '\n' + cq + '\n' + ch + '\n' + ss + '\nUNSIGNED-PAYLOAD'), cs = dt + '/' + region + '/s3/aws4_request', ks = await hmacSha256(await hmacSha256(await hmacSha256(await hmacSha256('AWS4' + appKey, dt), region), 's3'), 'aws4_request'), sig = Array.from(await hmacSha256(ks, 'AWS4-HMAC-SHA256\n' + amz + '\n' + cs + '\n' + crh)).map(b => b.toString(16).padStart(2, '0')).join('');
   rh.set('host', U.host);
   rh.set('x-amz-date', amz);
   rh.set('x-amz-content-sha256', 'UNSIGNED-PAYLOAD');
-  rh.set('Authorization', 'AWS4-HMAC-SHA256 Credential=' + e.B2_KEY_ID + '/' + cs + ', SignedHeaders=' + ss + ', Signature=' + sig);
+  rh.set('Authorization', 'AWS4-HMAC-SHA256 Credential=' + keyId + '/' + cs + ', SignedHeaders=' + ss + ', Signature=' + sig);
   return fetch(U.toString(), { ...o, headers: rh });
 }
 
 async function awsS3Presign(u, e, M = 'PUT', ex = 3600) {
-  const U = new URL(u), amz = new Date().toISOString().replace(/[:-]|\.\d{3}/g, ''), dt = amz.slice(0, 8), cs = dt + '/' + CONFIG.S3_REGION + '/s3/aws4_request';
+  const U = new URL(u), amz = new Date().toISOString().replace(/[:-]|\.\d{3}/g, ''), dt = amz.slice(0, 8);
+  const keyId = e.S3_ACCESS_KEY_ID || e.B2_KEY_ID || e.S3_KEY_ID || '';
+  const appKey = e.S3_SECRET_ACCESS_KEY || e.B2_APP_KEY || e.S3_APP_KEY || '';
+  const region = e.S3_REGION || CONFIG.S3_REGION;
+  const cs = dt + '/' + region + '/s3/aws4_request';
   U.searchParams.set('X-Amz-Algorithm', 'AWS4-HMAC-SHA256');
-  U.searchParams.set('X-Amz-Credential', e.B2_KEY_ID + '/' + cs);
+  U.searchParams.set('X-Amz-Credential', keyId + '/' + cs);
   U.searchParams.set('X-Amz-Date', amz);
   U.searchParams.set('X-Amz-Expires', ex.toString());
   U.searchParams.set('X-Amz-SignedHeaders', 'content-type;host');
-  const cu = decodeURIComponent(U.pathname).split('/').map(awsUriEncode).join('/').replace(/%2F/g, '/'), cq = Array.from(U.searchParams).sort(([a], [b]) => a < b ? -1 : 1).map(([k, v]) => awsUriEncode(k) + '=' + awsUriEncode(v)).join('&'), ch = 'content-type:application/octet-stream\nhost:' + U.host + '\n', crh = await hashSha256(M + '\n' + cu + '\n' + cq + '\n' + ch + '\ncontent-type;host\nUNSIGNED-PAYLOAD'), ks = await hmacSha256(await hmacSha256(await hmacSha256(await hmacSha256('AWS4' + e.B2_APP_KEY, dt), CONFIG.S3_REGION), 's3'), 'aws4_request'), sig = Array.from(await hmacSha256(ks, 'AWS4-HMAC-SHA256\n' + amz + '\n' + cs + '\n' + crh)).map(b => b.toString(16).padStart(2, '0')).join('');
+  const cu = decodeURIComponent(U.pathname).split('/').map(awsUriEncode).join('/').replace(/%2F/g, '/'), cq = Array.from(U.searchParams).sort(([a], [b]) => a < b ? -1 : 1).map(([k, v]) => awsUriEncode(k) + '=' + awsUriEncode(v)).join('&'), ch = 'content-type:application/octet-stream\nhost:' + U.host + '\n', crh = await hashSha256(M + '\n' + cu + '\n' + cq + '\n' + ch + '\ncontent-type;host\nUNSIGNED-PAYLOAD'), ks = await hmacSha256(await hmacSha256(await hmacSha256(await hmacSha256('AWS4' + appKey, dt), region), 's3'), 'aws4_request'), sig = Array.from(await hmacSha256(ks, 'AWS4-HMAC-SHA256\n' + amz + '\n' + cs + '\n' + crh)).map(b => b.toString(16).padStart(2, '0')).join('');
   U.searchParams.set('X-Amz-Signature', sig);
   return U.toString();
 }
