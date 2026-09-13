@@ -1,4 +1,4 @@
-# 🍬 糖糖云盘 (TT-Cloud)
+# 🍬 TTecloud (糖糖云盘)
 
 基于 **Cloudflare Pages (Functions) + Cloudflare D1 + S3 兼容对象存储 (Backblaze B2 / Cloudflare R2 / AWS S3 / MinIO 等)** 构建的现代化、极速、高颜值的开源私有网盘与图床系统。
 
@@ -171,7 +171,7 @@
 ## 📂 仓库目录结构一览
 
 ```
-ziyuanzhan/
+TTecloud/
 ├── config.json                   # 核心配置文件（S3 端点、存储桶、容量配额、站点信息）
 ├── schema.sql                    # Cloudflare D1 数据库初始化与索引脚本
 ├── package.json                  # 项目依赖与便捷脚本
@@ -184,8 +184,14 @@ ziyuanzhan/
     │   └── style.css             # 现代化玻璃拟态响应式样式表
     ├── js/
     │   └── app.js                # 前端核心业务引擎（分片计算、多线程直写、FAB 控制等）
-    └── openmoji/                 # 高清矢量 OpenMoji 表情与图标库
+    └── openmoji/                 # 精简版 OpenMoji 矢量表情与图标库（仅保留项目所需）
 ```
+
+---
+
+## 🤖 AI 声明 (AI Disclosure)
+
+本项目（**TTecloud**）由人类开发者进行产品需求规划与架构设计，**全部核心业务逻辑、前端交互界面、后端边缘云函数算法（包括原生 AWS S3 V4 签名、并发分片管理、流式下载、GitHub 追更引擎）均由 AI 辅助编写、调试与全面优化完成**。
 
 ---
 

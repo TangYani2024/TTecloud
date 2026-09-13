@@ -1,4 +1,7 @@
 node_modules
 .wrangler
-wrangler.toml.bak
-ziyuanzhan.js.bak
+*.bak
+ziyuanzhan.js
+ziyuanzhan*.js
+.DS_Store
+Thumbs.db
