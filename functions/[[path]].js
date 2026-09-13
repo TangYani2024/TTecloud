@@ -409,6 +409,144 @@ export async function onRequest(context) {
         }
       }
 
+      if (P === '/api/admin/github/rules') {
+        const bp = '.sys/__site_config__.json';
+        const cfgData = await getSiteConfig(e);
+        if (req.method === 'GET') {
+          return Response.json(cfgData.githubSyncRules || []);
+        }
+        if (req.method === 'POST') {
+          const { rules } = await req.json();
+          cfgData.githubSyncRules = rules || [];
+          globalSiteConfig = cfgData;
+          globalConfigTime = Date.now();
+          const rs = await awsS3Fetch(CONFIG.S3_ENDPOINT + '/' + CONFIG.BUCKETS.RESOURCE + '/' + encodeURIComponent(bp), {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(cfgData)
+          }, e);
+          return Response.json({ ok: rs.ok });
+        }
+      }
+
+      if (P === '/api/admin/github/sync' && req.method === 'POST') {
+        const bp = '.sys/__site_config__.json';
+        const { ruleId, force } = await req.json();
+        const cfgData = await getSiteConfig(e);
+        const rules = cfgData.githubSyncRules || [];
+        const rule = rules.find(r => r.id === ruleId);
+        if (!rule) return Response.json({ ok: false, error: '未找到该追更任务' });
+
+        const cleanRepo = rule.repo.trim().replace(/^https?:\/\/github\.com\//, '').replace(/\/$/, '');
+        if (!cleanRepo || !cleanRepo.includes('/')) return Response.json({ ok: false, error: 'GitHub 仓库格式不正确 (例: owner/repo)' });
+
+        const ghRes = await fetch(`https://api.github.com/repos/${cleanRepo}/releases/latest`, {
+          headers: {
+            'User-Agent': 'Cloudflare-Worker-TangYani-Drive',
+            'Accept': 'application/vnd.github.v3+json'
+          }
+        });
+        if (!ghRes.ok) {
+          const errTxt = await ghRes.text();
+          return Response.json({ ok: false, error: `GitHub API 错误 (${ghRes.status}): ${errTxt.slice(0, 100)}` });
+        }
+
+        const rel = await ghRes.json();
+        const tagName = rel.tag_name || '';
+        const assets = rel.assets || [];
+
+        const incWords = (rule.include || '').split(/[,，\s]+/).map(s => s.trim().toLowerCase()).filter(Boolean);
+        const excWords = (rule.exclude || '').split(/[,，\s]+/).map(s => s.trim().toLowerCase()).filter(Boolean);
+
+        const matchedAssets = assets.filter(a => {
+          const fn = (a.name || '').toLowerCase();
+          if (incWords.length > 0 && !incWords.some(w => fn.includes(w))) return false;
+          if (excWords.length > 0 && excWords.some(w => fn.includes(w))) return false;
+          return true;
+        });
+
+        if (matchedAssets.length === 0) {
+          return Response.json({ ok: true, skipped: true, msg: `未找到符合正负词过滤的文件 (最新 Release 版本: ${tagName})` });
+        }
+
+        if (!force && rule.lastTag === tagName && rule.lastFiles && rule.lastFiles.length > 0) {
+          return Response.json({ ok: true, skipped: true, msg: `已是最新版本 (${tagName})，无需更新` });
+        }
+
+        const targetFolder = (rule.folder || cleanRepo.split('/')[1] || cleanRepo).trim();
+        let newFiles = [];
+
+        for (const asset of matchedAssets) {
+          const fileRes = await fetch(asset.browser_download_url, {
+            headers: { 'User-Agent': 'Cloudflare-Worker-TangYani-Drive' },
+            redirect: 'follow'
+          });
+          if (!fileRes.ok) throw new Error(`拉取资源 ${asset.name} 失败 (${fileRes.status})`);
+
+          const cleanFileName = asset.name.replace(/^.*[\\\/]/, '').replace(/[:*?"<>|]/g, '_');
+          const newBp = Date.now() + '_' + cleanFileName;
+          const bk = CONFIG.BUCKETS.RESOURCE;
+          const putHeaders = {
+            'Content-Type': asset.content_type || 'application/octet-stream',
+            'x-amz-content-sha256': 'UNSIGNED-PAYLOAD'
+          };
+          if (asset.size) putHeaders['Content-Length'] = String(asset.size);
+
+          const putRs = await awsS3Fetch(CONFIG.S3_ENDPOINT + '/' + bk + '/' + encodeURIComponent(newBp), {
+            method: 'PUT',
+            headers: putHeaders,
+            body: fileRes.body
+          }, e);
+          if (!putRs.ok) throw new Error(`写入 B2 存储桶失败: ${await putRs.text()}`);
+
+          const fileId = crypto.randomUUID();
+          await e.DB.prepare("INSERT INTO files (id,name,b2_path,type,size,folder) VALUES (?,?,?,?,?,?)")
+            .bind(fileId, cleanFileName, newBp, bk, asset.size || 0, targetFolder)
+            .run();
+          newFiles.push({ id: fileId, name: cleanFileName, b2_path: newBp, bucket: bk });
+        }
+
+        // 追更成功后清理旧版本文件（同时清理 B2 存储与 D1 数据库记录）
+        if (rule.lastFiles && Array.isArray(rule.lastFiles)) {
+          for (const old of rule.lastFiles) {
+            try {
+              if (old.b2_path) {
+                await awsS3Fetch(CONFIG.S3_ENDPOINT + '/' + (old.bucket || CONFIG.BUCKETS.RESOURCE) + '/' + encodeURIComponent(old.b2_path), { method: 'DELETE' }, e);
+              }
+              if (old.id) {
+                await e.DB.prepare("DELETE FROM files WHERE id=?").bind(old.id).run();
+              }
+            } catch (err) {}
+          }
+        }
+
+        const now = new Date();
+        const pad = n => String(n).padStart(2, '0');
+        const timeStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+
+        rule.lastTag = tagName;
+        rule.lastUpdatedAt = timeStr;
+        rule.lastFiles = newFiles;
+
+        globalSiteConfig = cfgData;
+        globalConfigTime = Date.now();
+        globalLastSizeCalcTime = 0;
+        await awsS3Fetch(CONFIG.S3_ENDPOINT + '/' + CONFIG.BUCKETS.RESOURCE + '/' + encodeURIComponent(bp), {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(cfgData)
+        }, e);
+
+        return Response.json({
+          ok: true,
+          synced: true,
+          tag: tagName,
+          time: timeStr,
+          files: newFiles.map(f => f.name),
+          msg: `成功更新 ${cleanRepo} (${tagName})，共同步 ${newFiles.length} 个文件至 [${targetFolder}]，旧版本已清理`
+        });
+      }
+
       if (P === '/api/data' && req.method === 'GET') {
         const viewM = U.searchParams.get('view') || 'resource';
         let bk = viewM === 'image' ? CONFIG.BUCKETS.IMAGE : CONFIG.BUCKETS.RESOURCE;

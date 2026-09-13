@@ -165,6 +165,293 @@ const app = {
     this.openStaticModal('modal-settings');
   },
 
+  githubSyncRules: [],
+
+  showGithubModal() {
+    this.openStaticModal('modal-github');
+    this.loadGithubRules();
+  },
+
+  async loadGithubRules() {
+    try {
+      const r = await fetch('/api/admin/github/rules');
+      if (r.ok) {
+        this.githubSyncRules = await r.json();
+        this.renderGithubRules();
+      }
+    } catch (e) {}
+  },
+
+  renderGithubRules() {
+    const listEl = document.getElementById('gh-rules-list');
+    const countEl = document.getElementById('gh-count');
+    if (!listEl) return;
+    const rules = this.githubSyncRules || [];
+    if (countEl) countEl.innerText = rules.length;
+    if (rules.length === 0) {
+      listEl.innerHTML = '<p style="text-align:center;color:gray;font-size:12px;margin:20px 0;">暂无追更项目，请在上方添加~</p>';
+      return;
+    }
+
+    let h = '';
+    rules.forEach(rule => {
+      const inc = (rule.include || '').trim();
+      const exc = (rule.exclude || '').trim();
+      const lastTag = rule.lastTag || '未同步';
+      const lastTime = rule.lastUpdatedAt || '从未更新';
+      const folder = rule.folder || rule.repo.split('/')[1] || rule.repo;
+
+      let incBadges = inc ? inc.split(/[,，\s]+/).filter(Boolean).map(w => `<span class="gh-badge gh-badge-inc">+ ${this.escapeHTML(w)}</span>`).join(' ') : '<span style="color:gray;font-size:11px">全部</span>';
+      let excBadges = exc ? exc.split(/[,，\s]+/).filter(Boolean).map(w => `<span class="gh-badge gh-badge-exc">- ${this.escapeHTML(w)}</span>`).join(' ') : '';
+
+      h += `<div class="gh-rule-card" id="gh-card-${rule.id}">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+          <div style="font-weight:bold;font-size:14px;word-break:break-all">
+            <a href="https://github.com/${this.escapeHTML(rule.repo)}" target="_blank" style="color:var(--primary);text-decoration:none;display:inline-flex;align-items:center;gap:4px">
+              ${this.escapeHTML(rule.repo)}
+              <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+            </a>
+          </div>
+          <span class="gh-badge gh-badge-tag">${this.escapeHTML(lastTag)}</span>
+        </div>
+        <div style="font-size:12px;color:gray;display:flex;flex-wrap:wrap;align-items:center;gap:6px">
+          <span>📂 目录: <b>${this.escapeHTML(folder)}</b></span>
+          <span>•</span>
+          <span>包含: ${incBadges}</span>
+          ${excBadges ? `<span>•</span><span>排除: ${excBadges}</span>` : ''}
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;padding-top:6px;border-top:1px solid var(--cd)">
+          <span class="gh-badge-time">🕒 更新: ${this.escapeHTML(lastTime)}</span>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-sm btn-outline" style="padding:4px 8px;font-size:11px" onclick="app.editGithubRule('${rule.id}')">✏️ 编辑</button>
+            <button class="btn btn-sm btn-danger" style="padding:4px 8px;font-size:11px" onclick="app.deleteGithubRule('${rule.id}')">🗑️</button>
+            <button class="btn btn-sm btn-success" style="padding:4px 10px;font-size:11px" onclick="app.syncGithubRelease('${rule.id}', true)">🔄 追更</button>
+          </div>
+        </div>
+      </div>`;
+    });
+    listEl.innerHTML = h;
+  },
+
+  resetGithubForm() {
+    document.getElementById('gh-rule-id').value = '';
+    document.getElementById('gh-repo').value = '';
+    document.getElementById('gh-folder').value = '';
+    document.getElementById('gh-include').value = '';
+    document.getElementById('gh-exclude').value = '';
+    document.getElementById('gh-form-title').innerText = '➕ 添加追更项目';
+    document.getElementById('gh-cancel-edit-btn').style.display = 'none';
+  },
+
+  editGithubRule(id) {
+    const rule = (this.githubSyncRules || []).find(r => r.id === id);
+    if (!rule) return;
+    document.getElementById('gh-rule-id').value = rule.id;
+    document.getElementById('gh-repo').value = rule.repo;
+    document.getElementById('gh-folder').value = rule.folder || '';
+    document.getElementById('gh-include').value = rule.include || '';
+    document.getElementById('gh-exclude').value = rule.exclude || '';
+    document.getElementById('gh-form-title').innerText = '✏️ 编辑追更项目';
+    document.getElementById('gh-cancel-edit-btn').style.display = 'inline-block';
+    const formEl = document.getElementById('gh-repo');
+    if (formEl) formEl.focus();
+  },
+
+  async saveGithubRule() {
+    let repo = (document.getElementById('gh-repo').value || '').trim();
+    repo = repo.replace(/^https?:\/\/github\.com\//, '').replace(/\/$/, '');
+    if (!repo || !repo.includes('/')) return alert('请输入有效的 GitHub 仓库，例如: topjohnwu/Magisk');
+
+    const folder = (document.getElementById('gh-folder').value || '').trim() || repo.split('/')[1] || repo;
+    const include = (document.getElementById('gh-include').value || '').trim();
+    const exclude = (document.getElementById('gh-exclude').value || '').trim();
+    const ruleId = document.getElementById('gh-rule-id').value;
+
+    let rules = [...(this.githubSyncRules || [])];
+    if (ruleId) {
+      const idx = rules.findIndex(r => r.id === ruleId);
+      if (idx !== -1) {
+        rules[idx] = { ...rules[idx], repo, folder, include, exclude };
+      }
+    } else {
+      rules.push({
+        id: 'gh_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+        repo,
+        folder,
+        include,
+        exclude,
+        lastTag: '',
+        lastUpdatedAt: '',
+        lastFiles: []
+      });
+    }
+
+    try {
+      const r = await fetch('/api/admin/github/rules', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rules })
+      });
+      if (r.ok) {
+        this.githubSyncRules = rules;
+        this.renderGithubRules();
+        this.resetGithubForm();
+        this.toast('✅ 追更配置已保存');
+      } else {
+        alert('保存失败');
+      }
+    } catch (e) {
+      alert('网络请求失败');
+    }
+  },
+
+  async deleteGithubRule(id) {
+    if (!confirm('确定删除该追更订阅？')) return;
+    const rules = (this.githubSyncRules || []).filter(r => r.id !== id);
+    try {
+      const r = await fetch('/api/admin/github/rules', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rules })
+      });
+      if (r.ok) {
+        this.githubSyncRules = rules;
+        this.renderGithubRules();
+        this.resetGithubForm();
+        this.toast('🗑️ 订阅已移除');
+      }
+    } catch (e) {}
+  },
+
+  async syncGithubRelease(ruleId, force = false) {
+    const rule = (this.githubSyncRules || []).find(r => r.id === ruleId);
+    if (!rule) return;
+
+    this.closeModal('modal-github');
+    const upEl = document.getElementById('uploadProgress');
+    if (upEl) upEl.style.display = 'block';
+
+    const cleanRepo = rule.repo.trim().replace(/^https?:\/\/github\.com\//, '').replace(/\/$/, '');
+    document.getElementById('uploadStatus').innerHTML = `<img class="om-emoji" src="/openmoji/1F50D.svg" alt="🔍"> 正在检查 [${this.escapeHTML(cleanRepo)}] 最新 Release...`;
+    document.getElementById('uploadPercent').innerText = '1 / 1';
+    document.getElementById('uploadProgressBar').style.width = '30%';
+
+    document.getElementById('queueList').innerHTML = `<div style="font-size:12px;background:rgba(255,255,255,0.4);padding:8px 12px;border-radius:8px;border:1px solid var(--cd);">
+      <div style="display:flex;justify-content:space-between;">
+        <span style="font-weight:bold;">${this.escapeHTML(cleanRepo)}</span>
+        <span class="q-status" style="color:var(--primary)">云端分析中...</span>
+      </div>
+    </div>`;
+
+    try {
+      document.getElementById('uploadProgressBar').style.width = '60%';
+      const r = await fetch('/api/admin/github/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ruleId, force })
+      });
+      const res = await r.json();
+
+      document.getElementById('uploadProgressBar').style.width = '100%';
+      if (res.ok) {
+        if (res.skipped) {
+          document.getElementById('uploadStatus').innerHTML = `<img class="om-emoji" src="/openmoji/2705.svg" alt="✅"> ${this.escapeHTML(res.msg)}`;
+          document.getElementById('uploadStatus').style.color = '#10b981';
+        } else {
+          document.getElementById('uploadStatus').innerHTML = `<img class="om-emoji" src="/openmoji/1F389.svg" alt="🎉"> ${this.escapeHTML(res.msg)}`;
+          document.getElementById('uploadStatus').style.color = '#10b981';
+          this.toast('🎉 追更成功，旧版本已清理！');
+        }
+      } else {
+        document.getElementById('uploadStatus').innerHTML = `<img class="om-emoji" src="/openmoji/274C.svg" alt="❌"> 追更失败: ${this.escapeHTML(res.error || '未知错误')}`;
+        document.getElementById('uploadStatus').style.color = '#ef4444';
+      }
+
+      await this.loadGithubRules();
+      this.fetchData();
+
+      setTimeout(() => {
+        if (upEl && !this.isUploading) upEl.style.display = 'none';
+      }, 3500);
+    } catch (e) {
+      document.getElementById('uploadStatus').innerHTML = `<img class="om-emoji" src="/openmoji/274C.svg" alt="❌"> 网络中断`;
+      document.getElementById('uploadStatus').style.color = '#ef4444';
+      setTimeout(() => {
+        if (upEl && !this.isUploading) upEl.style.display = 'none';
+      }, 3000);
+    }
+  },
+
+  async syncAllGithubReleases() {
+    const rules = this.githubSyncRules || [];
+    if (rules.length === 0) return alert('当前没有已添加的追更项目');
+
+    this.closeModal('modal-github');
+    const upEl = document.getElementById('uploadProgress');
+    if (upEl) upEl.style.display = 'block';
+
+    let total = rules.length;
+    let completed = 0;
+    document.getElementById('uploadStatus').innerHTML = `<img class="om-emoji" src="/openmoji/26A1.svg" alt="⚡"> 正在批量检查 GitHub 追更 (0/${total})...`;
+    document.getElementById('uploadPercent').innerText = `0 / ${total}`;
+    document.getElementById('uploadProgressBar').style.width = '5%';
+
+    let qHtml = '';
+    rules.forEach(r => {
+      qHtml += `<div id="gh_q_${r.id}" style="font-size:12px;background:rgba(255,255,255,0.4);padding:8px 12px;border-radius:8px;border:1px solid var(--cd);margin-bottom:4px">
+        <div style="display:flex;justify-content:space-between;">
+          <span style="font-weight:bold;">${this.escapeHTML(r.repo)}</span>
+          <span class="q-st" style="color:var(--primary)">排队中</span>
+        </div>
+      </div>`;
+    });
+    document.getElementById('queueList').innerHTML = qHtml;
+
+    for (let r of rules) {
+      const qRow = document.getElementById(`gh_q_${r.id}`);
+      if (qRow) {
+        const st = qRow.querySelector('.q-st');
+        if (st) st.innerText = '检查更新中...';
+      }
+      try {
+        const res = await (await fetch('/api/admin/github/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ruleId: r.id })
+        })).json();
+
+        if (qRow) {
+          const st = qRow.querySelector('.q-st');
+          if (st) {
+            if (res.ok) {
+              st.innerHTML = res.skipped ? '已是最新' : '✅ 已同步更新';
+              st.style.color = '#10b981';
+            } else {
+              st.innerHTML = '❌ 失败';
+              st.style.color = '#ef4444';
+            }
+          }
+        }
+      } catch (err) {
+        if (qRow) {
+          const st = qRow.querySelector('.q-st');
+          if (st) { st.innerHTML = '❌ 异常'; st.style.color = '#ef4444'; }
+        }
+      }
+      completed++;
+      document.getElementById('uploadPercent').innerText = `${completed} / ${total}`;
+      document.getElementById('uploadProgressBar').style.width = `${Math.round((completed / total) * 100)}%`;
+      document.getElementById('uploadStatus').innerHTML = `<img class="om-emoji" src="/openmoji/26A1.svg" alt="⚡"> 正在批量检查 GitHub 追更 (${completed}/${total})...`;
+    }
+
+    document.getElementById('uploadStatus').innerHTML = `<img class="om-emoji" src="/openmoji/1F389.svg" alt="🎉"> 全部追更检查完毕！`;
+    await this.loadGithubRules();
+    this.fetchData();
+    setTimeout(() => {
+      if (upEl && !this.isUploading) upEl.style.display = 'none';
+    }, 3500);
+  },
+
   async init() {
     document.querySelectorAll('.d-b64').forEach(e => e.innerText = atob(e.dataset.b));
     this.refreshSettingsUI();
@@ -680,7 +967,7 @@ const app = {
       const a = m.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 200, fill: 'forwards' });
       if (!p) history.back();
       a.onfinish = () => {
-        if (['modal-upload', 'modal-cli', 'modal-settings'].includes(id)) {
+        if (['modal-upload', 'modal-cli', 'modal-settings', 'modal-github'].includes(id)) {
           m.style.display = 'none';
         } else {
           m.remove();

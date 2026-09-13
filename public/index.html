@@ -65,6 +65,12 @@
   <!-- 管理员悬浮操作按钮 (FAB) -->
   <div id="admin-fab-container" class="admin-fab-container" style="display:none">
     <div class="fab-sub-buttons" id="fab-sub-buttons">
+      <button type="button" class="fab-btn fab-btn-sub" id="fab-sub-github" onclick="app.showGithubModal()" title="GitHub追更">
+        <svg viewBox="0 0 98 96" width="24" height="24" style="fill:currentColor">
+          <path fill-rule="evenodd" clip-rule="evenodd" d="M48.854 0C21.839 0 0 22 0 49.217c0 21.756 13.993 40.172 33.405 46.69 2.427.49 3.316-1.059 3.316-2.34 0-1.144-.043-4.178-.066-8.202-13.593 2.981-16.461-6.611-16.461-6.611-2.222-5.701-5.426-7.218-5.426-7.218-4.436-3.064.337-3 .337-3 4.908.348 7.491 5.087 7.491 5.087 4.364 7.546 11.45 5.367 14.24 4.105.441-3.19 1.705-5.367 3.104-6.601-10.852-1.245-22.261-5.474-22.261-24.369 0-5.385 1.907-9.788 5.044-13.238-.5-1.245-2.188-6.264.48-13.06 0 0 4.103-1.328 13.435 5.051a46.286 46.286 0 0 1 12.24-1.664c4.152.019 8.335.565 12.24 1.664 9.319-6.379 13.411-5.051 13.411-5.051 2.68 6.796.992 11.815.493 13.06 3.149 3.45 5.032 7.853 5.032 13.238 0 18.946-11.43 23.108-22.32 24.327 1.764 1.542 3.34 4.59 3.34 9.255 0 6.687-.06 12.083-.06 13.728 0 1.293.876 2.859 3.34 2.339C84.03 89.37 98 70.965 98 49.217 98 22 76.154 0 48.854 0z"/>
+        </svg>
+        <span class="fab-btn-tip">GitHub追更</span>
+      </button>
       <button type="button" class="fab-btn fab-btn-sub" id="fab-sub-cli" onclick="app.showCliModal()" title="CLI与维护">
         <svg viewBox="0 0 24 24" width="24" height="24" fill="none">
           <path d="M6 3h8l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" fill="#1E2A3A" fill-opacity="0.4" stroke="#61DAFB" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -221,6 +227,68 @@
           <img class="om-emoji" src="/openmoji/274C.svg" alt="❌"> 关闭
         </button>
       </div>
+    </div>
+  </div>
+
+  <!-- GitHub Release 追更与同步弹窗 -->
+  <div class="modal-overlay" id="modal-github" style="display:none;opacity:0;">
+    <div class="modal-content" style="max-width:520px;width:94%;max-height:85vh;overflow-y:auto;transform:scale(0.95) translateY(15px);opacity:0">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <h3 style="margin:0;font-size:17px;display:flex;align-items:center;gap:8px">
+          <svg viewBox="0 0 98 96" width="22" height="22" style="fill:currentColor">
+            <path fill-rule="evenodd" clip-rule="evenodd" d="M48.854 0C21.839 0 0 22 0 49.217c0 21.756 13.993 40.172 33.405 46.69 2.427.49 3.316-1.059 3.316-2.34 0-1.144-.043-4.178-.066-8.202-13.593 2.981-16.461-6.611-16.461-6.611-2.222-5.701-5.426-7.218-5.426-7.218-4.436-3.064.337-3 .337-3 4.908.348 7.491 5.087 7.491 5.087 4.364 7.546 11.45 5.367 14.24 4.105.441-3.19 1.705-5.367 3.104-6.601-10.852-1.245-22.261-5.474-22.261-24.369 0-5.385 1.907-9.788 5.044-13.238-.5-1.245-2.188-6.264.48-13.06 0 0 4.103-1.328 13.435 5.051a46.286 46.286 0 0 1 12.24-1.664c4.152.019 8.335.565 12.24 1.664 9.319-6.379 13.411-5.051 13.411-5.051 2.68 6.796.992 11.815.493 13.06 3.149 3.45 5.032 7.853 5.032 13.238 0 18.946-11.43 23.108-22.32 24.327 1.764 1.542 3.34 4.59 3.34 9.255 0 6.687-.06 12.083-.06 13.728 0 1.293.876 2.859 3.34 2.339C84.03 89.37 98 70.965 98 49.217 98 22 76.154 0 48.854 0z"/>
+          </svg>
+          GitHub 追更与云端同步
+        </h3>
+        <button type="button" class="btn btn-sm btn-outline" style="padding:4px 10px;border-radius:8px" onclick="app.closeModal('modal-github')">✕</button>
+      </div>
+
+      <!-- 添加/编辑任务表单 -->
+      <div style="background:rgba(0,0,0,0.02);padding:14px;border-radius:12px;border:1px solid var(--cd);display:flex;flex-direction:column;gap:10px">
+        <div style="font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:space-between">
+          <span id="gh-form-title">➕ 添加追更项目</span>
+          <button type="button" id="gh-cancel-edit-btn" class="btn btn-sm btn-outline" style="display:none;padding:2px 8px;font-size:11px" onclick="app.resetGithubForm()">取消编辑</button>
+        </div>
+        <input type="hidden" id="gh-rule-id">
+        <div>
+          <label style="font-size:12px;font-weight:bold;color:gray;display:block;margin-bottom:4px">GitHub 仓库 (例: topjohnwu/Magisk)</label>
+          <input type="text" id="gh-repo" placeholder="owner/repo 或完整 GitHub 链接..." style="margin:0">
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:bold;color:gray;display:block;margin-bottom:4px">保存至目录 (留空默认为项目名)</label>
+          <input type="text" id="gh-folder" placeholder="例如: Magisk (自动建立目录)" style="margin:0">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div>
+            <label style="font-size:12px;font-weight:bold;color:#10b981;display:block;margin-bottom:4px">正向包含词 (例: apk)</label>
+            <input type="text" id="gh-include" placeholder="留空不过滤，逗号分隔" style="margin:0;font-size:12px">
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:bold;color:#ef4444;display:block;margin-bottom:4px">负向排除词 (例: debug)</label>
+            <input type="text" id="gh-exclude" placeholder="留空不排除，逗号分隔" style="margin:0;font-size:12px">
+          </div>
+        </div>
+        <button type="button" class="btn btn-success" style="width:100%;padding:10px;font-size:13px;margin-top:2px" onclick="app.saveGithubRule()">
+          💾 保存追更配置
+        </button>
+      </div>
+
+      <!-- 追更任务列表 -->
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">
+          <span style="font-size:13px;font-weight:bold;">已订阅追更项目 (<span id="gh-count">0</span>)</span>
+          <button type="button" class="btn btn-sm btn-primary" onclick="app.syncAllGithubReleases()">
+            <img class="om-emoji" src="/openmoji/26A1.svg" alt="⚡"> 一键检查并追更全部
+          </button>
+        </div>
+        <div id="gh-rules-list" style="max-height:280px;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding-right:2px">
+          <!-- 动态任务列表项 -->
+        </div>
+      </div>
+
+      <button class="btn btn-outline" style="width:100%;margin-top:6px;padding:12px;border-radius:12px" onclick="app.closeModal('modal-github')">
+        <img class="om-emoji" src="/openmoji/274C.svg" alt="❌"> 关闭
+      </button>
     </div>
   </div>
 
