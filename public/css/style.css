@@ -475,6 +475,9 @@ input:focus {
     bottom: 18px;
     gap: 12px;
   }
+  .fab-btn-tip {
+    display: none !important;
+  }
 }
 
 .fab-btn {
@@ -541,6 +544,13 @@ input:focus {
   pointer-events: none;
   position: relative;
   color: var(--tx);
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.fab-btn-sub svg,
+.fab-btn-sub img {
+  pointer-events: none;
 }
 
 .fab-btn-sub:hover {
@@ -651,36 +661,39 @@ input:focus {
   font-size: 11px;
 }
 
-/* 红色圆圈白色X关闭按钮 */
+/* 红色圆角方块白色X关闭按钮 */
 .btn-modal-close-red {
-  width: 28px;
-  height: 28px;
-  min-width: 28px;
-  min-height: 28px;
-  border-radius: 50%;
-  background: #ef4444;
-  color: #ffffff;
-  border: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  padding: 0;
-  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.35);
+  width: 32px !important;
+  height: 32px !important;
+  min-width: 32px !important;
+  min-height: 32px !important;
+  border-radius: 8px !important;
+  background: #ef4444 !important;
+  color: #ffffff !important;
+  border: none !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  padding: 0 !important;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.4) !important;
   transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
   outline: none;
   flex-shrink: 0;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 .btn-modal-close-red:hover {
-  background: #dc2626;
-  transform: scale(1.1);
-  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.45);
+  background: #dc2626 !important;
+  transform: scale(1.08);
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.5) !important;
 }
 .btn-modal-close-red:active {
   transform: scale(0.92);
 }
 .btn-modal-close-red svg {
   display: block;
+  pointer-events: none;
 }
 
 /* GitHub 弹窗标签导航与排版优化 */

@@ -124,19 +124,21 @@ const app = {
     document.body.classList.add('modal-open');
     document.documentElement.classList.add('modal-open');
     m.style.display = 'flex';
-    m.style.opacity = '0';
+    m.style.opacity = '1';
     const mc = m.querySelector('.modal-content');
     if (mc) {
-      mc.style.opacity = '0';
-      mc.style.transform = 'scale(0.95) translateY(15px)';
+      mc.style.opacity = '1';
+      mc.style.transform = 'scale(1) translateY(0)';
     }
-    m.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, fill: 'forwards' });
-    if (mc) {
-      mc.animate(
-        [{ transform: 'scale(0.95) translateY(15px)', opacity: 0 }, { transform: 'scale(1) translateY(0)', opacity: 1 }],
-        { duration: 350, easing: 'cubic-bezier(0.175,0.885,0.32,1.275)', fill: 'forwards' }
-      );
-    }
+    try {
+      m.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 180 });
+      if (mc) {
+        mc.animate(
+          [{ transform: 'scale(0.95) translateY(12px)', opacity: 0 }, { transform: 'scale(1) translateY(0)', opacity: 1 }],
+          { duration: 240, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' }
+        );
+      }
+    } catch (e) {}
   },
 
   showUploadModal() {
@@ -548,10 +550,26 @@ const app = {
       this.applyBg();
     });
 
-    document.addEventListener('click', e => {
+    const closeFabOnOutside = e => {
       const fab = document.getElementById('admin-fab-container');
       if (this.fabExpanded && fab && !fab.contains(e.target)) {
         this.collapseFab();
+      }
+    };
+    document.addEventListener('click', closeFabOnOutside);
+    document.addEventListener('touchstart', closeFabOnOutside, { passive: true });
+
+    ['fab-sub-github', 'fab-sub-cli', 'fab-sub-settings'].forEach(bid => {
+      const b = document.getElementById(bid);
+      if (b) {
+        let lastTouch = 0;
+        b.addEventListener('touchend', e => {
+          const now = Date.now();
+          if (now - lastTouch < 500) return;
+          lastTouch = now;
+          e.preventDefault();
+          b.click();
+        }, { passive: false });
       }
     });
 
@@ -1038,17 +1056,29 @@ const app = {
         document.body.classList.remove('modal-open');
         document.documentElement.classList.remove('modal-open');
       }
-      const mc = m.querySelector('.modal-content');
-      if (mc) mc.animate([{ transform: 'scale(1) translateY(0)', opacity: 1 }, { transform: 'scale(0.95) translateY(15px)', opacity: 0 }], { duration: 200, easing: 'ease-in', fill: 'forwards' });
-      const a = m.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 200, fill: 'forwards' });
-      if (!p) history.back();
-      a.onfinish = () => {
+      const finishClose = () => {
         if (['modal-upload', 'modal-cli', 'modal-settings', 'modal-github'].includes(id)) {
           m.style.display = 'none';
+          m.style.opacity = '';
+          const mc = m.querySelector('.modal-content');
+          if (mc) {
+            mc.style.opacity = '';
+            mc.style.transform = '';
+          }
         } else {
           m.remove();
         }
       };
+      if (!p) history.back();
+      try {
+        const mc = m.querySelector('.modal-content');
+        if (mc) mc.animate([{ transform: 'scale(1) translateY(0)', opacity: 1 }, { transform: 'scale(0.95) translateY(12px)', opacity: 0 }], { duration: 150, easing: 'ease-in' });
+        const a = m.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 150 });
+        a.onfinish = finishClose;
+        setTimeout(finishClose, 180);
+      } catch (e) {
+        finishClose();
+      }
     }
   },
 
