@@ -413,7 +413,10 @@ export async function onRequest(context) {
         const bp = '.sys/__site_config__.json';
         const cfgData = await getSiteConfig(e);
         if (req.method === 'GET') {
-          return Response.json(cfgData.githubSyncRules || []);
+          return Response.json({
+            rules: cfgData.githubSyncRules || [],
+            hasToken: !!(e.GITHUB_TOKEN || e.GH_TOKEN)
+          });
         }
         if (req.method === 'POST') {
           const { rules } = await req.json();
@@ -440,14 +443,26 @@ export async function onRequest(context) {
         const cleanRepo = rule.repo.trim().replace(/^https?:\/\/github\.com\//, '').replace(/\/$/, '');
         if (!cleanRepo || !cleanRepo.includes('/')) return Response.json({ ok: false, error: 'GitHub 仓库格式不正确 (例: owner/repo)' });
 
+        const ghHeaders = {
+          'User-Agent': 'Cloudflare-Worker-TangYani-Drive',
+          'Accept': 'application/vnd.github.v3+json'
+        };
+        const ghToken = (e.GITHUB_TOKEN || e.GH_TOKEN || '').trim();
+        if (ghToken) {
+          ghHeaders['Authorization'] = `Bearer ${ghToken}`;
+        }
+
         const ghRes = await fetch(`https://api.github.com/repos/${cleanRepo}/releases/latest`, {
-          headers: {
-            'User-Agent': 'Cloudflare-Worker-TangYani-Drive',
-            'Accept': 'application/vnd.github.v3+json'
-          }
+          headers: ghHeaders
         });
         if (!ghRes.ok) {
           const errTxt = await ghRes.text();
+          if (ghRes.status === 403 && !ghToken) {
+            return Response.json({ ok: false, error: 'GitHub 匿名 IP 限频，请在 Cloudflare 环境变量中添加 GITHUB_TOKEN' });
+          }
+          if (ghRes.status === 401) {
+            return Response.json({ ok: false, error: 'Cloudflare 环境变量 GITHUB_TOKEN 无效或过期' });
+          }
           return Response.json({ ok: false, error: `GitHub API 错误 (${ghRes.status}): ${errTxt.slice(0, 100)}` });
         }
 

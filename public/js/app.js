@@ -172,11 +172,20 @@ const app = {
     this.loadGithubRules();
   },
 
+  hasGithubToken: false,
+
   async loadGithubRules() {
     try {
       const r = await fetch('/api/admin/github/rules');
       if (r.ok) {
-        this.githubSyncRules = await r.json();
+        const data = await r.json();
+        if (Array.isArray(data)) {
+          this.githubSyncRules = data;
+          this.hasGithubToken = false;
+        } else {
+          this.githubSyncRules = data.rules || [];
+          this.hasGithubToken = !!data.hasToken;
+        }
         this.renderGithubRules();
       }
     } catch (e) {}
@@ -185,6 +194,14 @@ const app = {
   renderGithubRules() {
     const listEl = document.getElementById('gh-rules-list');
     const countEl = document.getElementById('gh-count');
+    const tokenStatusEl = document.getElementById('gh-token-status');
+    if (tokenStatusEl) {
+      if (this.hasGithubToken) {
+        tokenStatusEl.innerHTML = '<span style="color:#10b981;font-weight:bold">🟢 Cloudflare 环境变量 GITHUB_TOKEN 已就绪 (享 5000次/小时 配额)</span>';
+      } else {
+        tokenStatusEl.innerHTML = '<span style="color:#f59e0b;font-weight:bold">⚠️ 未配置 GITHUB_TOKEN</span><span style="color:gray;font-size:11px">（请在 Cloudflare 后台设置环境变量 GITHUB_TOKEN 以防 403 限频）</span>';
+      }
+    }
     if (!listEl) return;
     const rules = this.githubSyncRules || [];
     if (countEl) countEl.innerText = rules.length;
