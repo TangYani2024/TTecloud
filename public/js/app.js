@@ -131,14 +131,25 @@ const app = {
       mc.style.transform = 'scale(1) translateY(0)';
     }
     try {
-      m.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 180 });
+      m.style.willChange = 'opacity';
+      if (mc) mc.style.willChange = 'transform, opacity';
+      const a1 = m.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 150 });
       if (mc) {
-        mc.animate(
-          [{ transform: 'scale(0.95) translateY(12px)', opacity: 0 }, { transform: 'scale(1) translateY(0)', opacity: 1 }],
-          { duration: 240, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' }
+        const a2 = mc.animate(
+          [{ transform: 'scale(0.96) translateY(10px)', opacity: 0 }, { transform: 'scale(1) translateY(0)', opacity: 1 }],
+          { duration: 200, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' }
         );
+        a2.onfinish = () => {
+          if (mc) mc.style.willChange = '';
+          m.style.willChange = '';
+        };
+      } else {
+        a1.onfinish = () => { m.style.willChange = ''; };
       }
-    } catch (e) {}
+    } catch (e) {
+      m.style.willChange = '';
+      if (mc) mc.style.willChange = '';
+    }
   },
 
   showUploadModal() {
@@ -192,8 +203,13 @@ const app = {
   },
 
   showGithubModal() {
+    if (this.githubSyncRules && this.githubSyncRules.length > 0) {
+      this.renderGithubRules();
+    }
     this.openStaticModal('modal-github');
-    this.loadGithubRules();
+    setTimeout(() => {
+      this.loadGithubRules();
+    }, 50);
   },
 
   hasGithubToken: false,
@@ -206,6 +222,7 @@ const app = {
       });
       if (r.ok) {
         const data = await r.json();
+        const prevJson = JSON.stringify(this.githubSyncRules || []);
         if (Array.isArray(data)) {
           this.githubSyncRules = data;
           this.hasGithubToken = false;
@@ -215,10 +232,22 @@ const app = {
         }
         if (this.githubSyncRules.length === 0 && !document.getElementById('gh-rule-id').value) {
           this.switchGithubTab('form');
-        } else {
-          this.switchGithubTab(this.githubTab || 'list');
+        } else if (this.githubTab !== 'form') {
+          this.switchGithubTab('list');
         }
-        this.renderGithubRules();
+        const listEl = document.getElementById('gh-rules-list');
+        if (prevJson !== JSON.stringify(this.githubSyncRules) || !listEl || !listEl.hasChildNodes()) {
+          this.renderGithubRules();
+        } else {
+          const tokenStatusEl = document.getElementById('gh-token-status');
+          const countEl = document.getElementById('gh-count');
+          if (countEl) countEl.innerText = (this.githubSyncRules || []).length;
+          if (tokenStatusEl) {
+            tokenStatusEl.innerHTML = this.hasGithubToken
+              ? '<span style="color:#10b981;font-weight:bold;display:inline-flex;align-items:center;gap:4px">🟢 GITHUB_TOKEN 就绪 (5000次/时)</span>'
+              : '<span style="color:#f59e0b;font-weight:bold;display:inline-flex;align-items:center;gap:4px">⚠️ 未配 TOKEN</span><span style="color:gray;font-size:11px">（防403限频）</span>';
+          }
+        }
       }
     } catch (e) {}
   },
@@ -573,20 +602,39 @@ const app = {
       }
     });
 
-    // 阻止弹窗外鼠标滚轮穿透到背后的文件列表
+    // 阻止弹窗外鼠标滚轮穿透到背后的文件列表，同时确保弹窗内可滚动容器（如 GitHub 订阅列表）能正常滑动
     document.addEventListener('wheel', e => {
       if (document.body.classList.contains('modal-open')) {
         const mc = e.target.closest('.modal-content');
         if (!mc) {
           e.preventDefault();
-        } else {
-          const { scrollTop, scrollHeight, clientHeight } = mc;
-          const delta = e.deltaY;
-          const isAtTop = delta < 0 && scrollTop <= 0;
-          const isAtBottom = delta > 0 && scrollTop + clientHeight >= scrollHeight - 1;
-          if (isAtTop || isAtBottom) {
-            e.preventDefault();
+          return;
+        }
+        // 查找从 e.target 向上至 mc 之间首个真正可滚动的容器
+        let scrollEl = null;
+        let cur = e.target;
+        while (cur && cur !== document.body && cur !== document.documentElement) {
+          const style = window.getComputedStyle(cur);
+          const isScrollable = (style.overflowY === 'auto' || style.overflowY === 'scroll') && (cur.scrollHeight > cur.clientHeight);
+          if (isScrollable) {
+            scrollEl = cur;
+            break;
           }
+          if (cur === mc) break;
+          cur = cur.parentElement;
+        }
+
+        if (!scrollEl) {
+          e.preventDefault();
+          return;
+        }
+
+        const { scrollTop, scrollHeight, clientHeight } = scrollEl;
+        const delta = e.deltaY;
+        const isAtTop = delta < 0 && scrollTop <= 0;
+        const isAtBottom = delta > 0 && Math.ceil(scrollTop + clientHeight) >= scrollHeight;
+        if (isAtTop || isAtBottom) {
+          e.preventDefault();
         }
       }
     }, { passive: false });
