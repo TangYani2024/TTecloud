@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
   <title>糖糖云盘</title>
-  <link rel="stylesheet" href="/css/style.css?v=3.9">
+  <link rel="stylesheet" href="/css/style.css?v=4.0">
 </head>
 <body>
   <div class="bg-layer"></div>
@@ -58,7 +58,7 @@
 
     <!-- 导航栏与搜索 -->
     <div class="card" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
-      <button class="btn btn-sm btn-outline" onclick="app.goHome()" id="btn-back" style="display:none">&larr; 返回</button>
+      <button class="btn btn-sm btn-soft-primary" onclick="app.goHome()" id="btn-back" style="display:none">&larr; 返回上级</button>
       <span id="breadcrumb" style="font-weight:700;font-size:16px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><img class="om-emoji" src="/openmoji/1F4C1.svg" alt="📁"> 根目录</span>
       <input type="text" id="search-input" placeholder="🔍 搜索..." oninput="app.debounceSearch()" style="width:140px;padding:10px 12px;margin:0;border-radius:10px">
     </div>
@@ -127,7 +127,7 @@
         </div>
         <div id="queue-info" style="font-size:12px;color:gray;text-align:center">完美支持多文件、多级文件夹拖拽识别并发</div>
 
-        <button id="uploadBtn" class="btn" onclick="app.startUploadQueue()" style="width:100%;font-size:16px;padding:14px">
+        <button id="uploadBtn" class="btn btn-primary" onclick="app.startUploadQueue()" style="width:100%;font-size:16px;padding:14px">
           <img class="om-emoji" src="/openmoji/1F4E4.svg" alt="📤"> 开始并发上传
         </button>
       </div>
@@ -162,16 +162,16 @@
           <img class="om-emoji" src="/openmoji/1F504.svg" alt="🔄"> 存储桶与数据库维护
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-          <button class="btn btn-success flex-1" style="white-space:nowrap;padding:12px 10px;font-size:13px" onclick="app.adminAct('sync_b2_to_d1',null,null)">
+          <button class="btn btn-soft-success flex-1" style="white-space:nowrap;padding:12px 10px;font-size:13px" onclick="app.adminAct('sync_b2_to_d1',null,null)">
             <img class="om-emoji" src="/openmoji/1F504.svg" alt="🔄"> 同步D1
           </button>
-          <button class="btn btn-outline flex-1" style="white-space:nowrap;padding:12px 10px;font-size:13px" onclick="app.showSessionsModal()">
+          <button class="btn btn-soft-primary flex-1" style="white-space:nowrap;padding:12px 10px;font-size:13px" onclick="app.showSessionsModal()">
             <img class="om-emoji" src="/openmoji/1F9F9.svg" alt="🧹"> 碎片管理
           </button>
-          <button class="btn btn-warn flex-1" style="white-space:nowrap;padding:12px 10px;font-size:13px" onclick="app.adminAct('sync_d1_ghosts',null,null)">
+          <button class="btn btn-soft-warn flex-1" style="white-space:nowrap;padding:12px 10px;font-size:13px" onclick="app.adminAct('sync_d1_ghosts',null,null)">
             <img class="om-emoji" src="/openmoji/1F5D1.svg" alt="🗑️"> 清死链
           </button>
-          <button class="btn btn-danger flex-1" style="white-space:nowrap;padding:12px 10px;font-size:13px" onclick="app.adminAct('sync_b2_orphans',null,null)">
+          <button class="btn btn-soft-danger flex-1" style="white-space:nowrap;padding:12px 10px;font-size:13px" onclick="app.adminAct('sync_b2_orphans',null,null)">
             <img class="om-emoji" src="/openmoji/1F4A3.svg" alt="💣"> 删游离
           </button>
         </div>
@@ -185,7 +185,7 @@
         <p style="font-size:12px;color:gray;margin:0;line-height:1.5">输入<strong>本地文件路径 + 文件名</strong>（如 <code>./test.zip</code>、<code>D:/data.iso</code> 或当前目录下的 <code>app.apk</code>）生成专属直传命令，绕过网关直接秒速推送到存储桶：</p>
         <input type="text" id="cli-temp-name" placeholder="输入本地文件路径+文件名 (如: ./file.zip 或 D:/data.apk)..." style="margin:0;padding:12px;font-size:13px">
         <div style="font-size:11px;color:gray;margin-top:-4px">💡 提示：支持相对路径或绝对路径，终端将读取该路径下的本地文件发起直传。</div>
-        <button class="btn btn-success" style="width:100%;padding:12px;font-size:14px" onclick="app.generateCliUpload()">
+        <button class="btn btn-primary" style="width:100%;padding:12px;font-size:14px" onclick="app.generateCliUpload()">
           <img class="om-emoji" src="/openmoji/1F4CB.svg" alt="📋"> 获取并复制 Curl 命令
         </button>
       </div>
@@ -325,11 +325,11 @@
     </div>
   </div>
 
-  <script src="/js/icons.js?v=3.9"></script>
-  <script src="/js/app.js?v=3.9"></script>
-  <script src="/js/download.js?v=3.9"></script>
-  <script src="/js/upload.js?v=3.9"></script>
-  <script src="/js/github.js?v=3.9"></script>
-  <script src="/js/admin.js?v=3.9"></script>
+  <script src="/js/icons.js?v=4.0"></script>
+  <script src="/js/app.js?v=4.0"></script>
+  <script src="/js/download.js?v=4.0"></script>
+  <script src="/js/upload.js?v=4.0"></script>
+  <script src="/js/github.js?v=4.0"></script>
+  <script src="/js/admin.js?v=4.0"></script>
 </body>
 </html>

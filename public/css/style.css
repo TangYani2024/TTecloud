@@ -181,41 +181,170 @@ body.modal-open .admin-fab-container {
 .btn-sm {
   padding: 6px 12px;
   font-size: 12px;
+  border-radius: 8px;
 }
 
+/* Primary Vibrant Blue */
+.btn-primary {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  color: #fff !important;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.3);
+}
+.btn-primary:hover {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.45);
+}
+
+/* Soft Primary Blue */
+.btn-soft-primary {
+  background: rgba(59, 130, 246, 0.09);
+  color: #2563eb !important;
+  border: 1px solid rgba(59, 130, 246, 0.25);
+}
+.btn-soft-primary:hover {
+  background: rgba(59, 130, 246, 0.16);
+  border-color: rgba(59, 130, 246, 0.45);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+}
+
+/* Success Emerald Green */
+.btn-success {
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: #fff !important;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);
+}
+.btn-success:hover {
+  background: linear-gradient(135deg, #059669, #047857);
+  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.45);
+}
+
+/* Soft Success */
+.btn-soft-success {
+  background: rgba(16, 185, 129, 0.09);
+  color: #059669 !important;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+.btn-soft-success:hover {
+  background: rgba(16, 185, 129, 0.16);
+  border-color: rgba(16, 185, 129, 0.45);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.15);
+}
+
+/* Creative Purple/Violet */
+.btn-purple {
+  background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+  color: #fff !important;
+  box-shadow: 0 4px 14px rgba(139, 92, 246, 0.3);
+}
+.btn-purple:hover {
+  background: linear-gradient(135deg, #7c3aed, #6d28d9);
+  box-shadow: 0 6px 20px rgba(139, 92, 246, 0.45);
+}
+
+/* Soft Purple */
+.btn-soft-purple {
+  background: rgba(139, 92, 246, 0.09);
+  color: #7c3aed !important;
+  border: 1px solid rgba(139, 92, 246, 0.25);
+}
+.btn-soft-purple:hover {
+  background: rgba(139, 92, 246, 0.16);
+  border-color: rgba(139, 92, 246, 0.45);
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.15);
+}
+
+/* Cyan / Teal */
+.btn-cyan {
+  background: linear-gradient(135deg, #06b6d4, #0891b2);
+  color: #fff !important;
+  box-shadow: 0 4px 14px rgba(6, 182, 212, 0.3);
+}
+.btn-cyan:hover {
+  background: linear-gradient(135deg, #0891b2, #0e7490);
+  box-shadow: 0 6px 20px rgba(6, 182, 212, 0.45);
+}
+
+/* Soft Cyan */
+.btn-soft-cyan {
+  background: rgba(6, 182, 212, 0.09);
+  color: #0891b2 !important;
+  border: 1px solid rgba(6, 182, 212, 0.25);
+}
+.btn-soft-cyan:hover {
+  background: rgba(6, 182, 212, 0.16);
+  border-color: rgba(6, 182, 212, 0.45);
+  box-shadow: 0 4px 12px rgba(6, 182, 212, 0.15);
+}
+
+/* Warning Amber */
+.btn-warn {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: #fff !important;
+  box-shadow: 0 4px 14px rgba(245, 158, 11, 0.3);
+}
+.btn-warn:hover {
+  background: linear-gradient(135deg, #d97706, #b45309);
+  box-shadow: 0 6px 20px rgba(245, 158, 11, 0.45);
+}
+
+/* Soft Warn */
+.btn-soft-warn {
+  background: rgba(245, 158, 11, 0.09);
+  color: #d97706 !important;
+  border: 1px solid rgba(245, 158, 11, 0.25);
+}
+.btn-soft-warn:hover {
+  background: rgba(245, 158, 11, 0.16);
+  border-color: rgba(245, 158, 11, 0.45);
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.15);
+}
+
+/* Danger Coral Red */
+.btn-danger {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  color: #fff !important;
+  box-shadow: 0 4px 14px rgba(239, 68, 68, 0.3);
+}
+.btn-danger:hover {
+  background: linear-gradient(135deg, #dc2626, #b91c1c);
+  box-shadow: 0 6px 20px rgba(239, 68, 68, 0.45);
+}
+
+/* Soft Danger */
+.btn-soft-danger {
+  background: rgba(239, 68, 68, 0.09);
+  color: #dc2626 !important;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+.btn-soft-danger:hover {
+  background: rgba(239, 68, 68, 0.16);
+  border-color: rgba(239, 68, 68, 0.45);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.15);
+}
+
+/* Slate / Terminal Code */
+.btn-slate, .btn-soft-slate {
+  background: rgba(100, 116, 139, 0.08);
+  color: #475569 !important;
+  border: 1px solid rgba(100, 116, 139, 0.2);
+}
+.btn-slate:hover, .btn-soft-slate:hover {
+  background: rgba(100, 116, 139, 0.15);
+  border-color: rgba(100, 116, 139, 0.38);
+  box-shadow: 0 4px 12px rgba(100, 116, 139, 0.12);
+}
+
+/* Refined Glass Neutral Outline */
 .btn-outline {
-  background: transparent;
+  background: rgba(0, 0, 0, 0.02);
   color: var(--tx) !important;
   border: 1px solid var(--cd);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
 }
-
 .btn-outline:hover {
-  background: rgba(0, 0, 0, 0.05);
-}
-
-.btn-danger {
-  background: #ef4444;
-}
-
-.btn-danger:hover {
-  background: #dc2626;
-}
-
-.btn-warn {
-  background: #f59e0b;
-}
-
-.btn-warn:hover {
-  background: #d97706;
-}
-
-.btn-success {
-  background: #10b981;
-}
-
-.btn-success:hover {
-  background: #059669;
+  background: rgba(0, 0, 0, 0.06);
+  border-color: rgba(0, 0, 0, 0.18);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
 
 input, select {

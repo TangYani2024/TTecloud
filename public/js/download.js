@@ -65,7 +65,7 @@ Object.assign(app, {
           '<span id="dl-pct" style="font-weight:700">0%</span>' +
         '</div>' +
         '<div id="dl-actions" style="display:flex;gap:10px;margin-top:12px">' +
-          '<button type="button" class="btn btn-sm btn-outline flex-1" onclick="app.abortCurrentDownload(\'' + f.id + '\')">取消下载</button>' +
+          '<button type="button" class="btn btn-sm btn-soft-danger flex-1" onclick="app.abortCurrentDownload(\'' + f.id + '\')">取消下载</button>' +
         '</div>' +
       '</div>';
 
@@ -204,7 +204,7 @@ Object.assign(app, {
           '<span id="dl-pct" style="font-weight:700">0%</span>' +
         '</div>' +
         '<div id="dl-actions" style="display:flex;gap:10px;margin-top:12px">' +
-          '<button type="button" class="btn btn-sm btn-outline flex-1" onclick="app.abortCurrentDownload(\'' + f.id + '\')">取消下载</button>' +
+          '<button type="button" class="btn btn-sm btn-soft-danger flex-1" onclick="app.abortCurrentDownload(\'' + f.id + '\')">取消下载</button>' +
         '</div>' +
       '</div>';
 
@@ -347,7 +347,7 @@ Object.assign(app, {
           '<button type="button" class="btn btn-success" style="width:100%;padding:12px" data-url="' + dlUrl + '" onclick="app.copyText(this.dataset.url);app.toast(\'已重新复制直链！\')">' +
             '<img class="om-emoji" src="/openmoji/1F4CB.svg" alt="📋"> 再次复制直链' +
           '</button>' +
-          '<a href="' + dlUrl + '" class="btn btn-outline" target="_blank" style="text-decoration:none;padding:10px" onclick="app.closeModal(\'tpM\',1)">' +
+          '<a href="' + dlUrl + '" class="btn btn-soft-primary" target="_blank" style="text-decoration:none;padding:10px" onclick="app.closeModal(\'tpM\',1)">' +
             '<img class="om-emoji" src="/openmoji/1F4E5.svg" alt="📥"> 仍尝试浏览器原生下载' +
           '</a>' +
           '<button type="button" class="btn btn-outline" style="padding:10px" onclick="app.closeModal(\'tpM\',1)">关闭</button>' +
