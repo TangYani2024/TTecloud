@@ -149,11 +149,7 @@ const app = {
       });
     });
 
-    document.addEventListener('click', e => {
-      if (e.target && e.target.classList && e.target.classList.contains('modal-overlay')) {
-        this.closeModal(e.target.id);
-      }
-    });
+
 
     window.addEventListener('resize', () => {
       const cw = window.innerWidth;
