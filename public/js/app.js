@@ -856,12 +856,8 @@ const app = {
     const applyRender = (rs) => {
       this.state.fileList = rs.data || [];
       if (rs.mode === 'folders') this.state.folderList = rs.data || [];
-      const renderDom = () => {
-        if (rs.mode === 'folders') this.renderFolders(rs.data);
-        else this.renderFiles(rs.data);
-      };
-      if (document.startViewTransition) document.startViewTransition(() => renderDom());
-      else renderDom();
+      if (rs.mode === 'folders') this.renderFolders(rs.data);
+      else this.renderFiles(rs.data);
     };
 
     // SWR 命中：若本地已有内存缓存且非强制刷新，0毫秒直接展现
