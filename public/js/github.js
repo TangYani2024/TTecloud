@@ -1,4 +1,4 @@
-Object.assign(app, {
+﻿Object.assign(app, {
   githubSyncRules: [],
 
   githubTab: 'list',
@@ -126,8 +126,8 @@ Object.assign(app, {
         <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;padding-top:8px;border-top:1px solid var(--cd);flex-wrap:wrap;gap:8px">
           <span class="gh-badge-time">🕒 更新时间: ${this.escapeHTML(lastTime)}</span>
           <div style="display:flex;gap:6px">
-            <button class="btn btn-sm btn-soft-primary" style="padding:4px 10px;font-size:12px" onclick="app.editGithubRule('${rule.id}')">✏️ 编辑</button>
-            <button class="btn btn-sm btn-soft-danger" style="padding:4px 10px;font-size:12px" onclick="app.deleteGithubRule('${rule.id}')">🗑️ 删除</button>
+            <button class="btn btn-sm btn-outline" style="padding:4px 10px;font-size:12px" onclick="app.editGithubRule('${rule.id}')">✏️ 编辑</button>
+            <button class="btn btn-sm btn-danger" style="padding:4px 10px;font-size:12px" onclick="app.deleteGithubRule('${rule.id}')">🗑️ 删除</button>
             <button class="btn btn-sm btn-success" style="padding:4px 12px;font-size:12px;font-weight:bold" onclick="app.syncGithubRelease('${rule.id}', true)">🔄 追更</button>
           </div>
         </div>
