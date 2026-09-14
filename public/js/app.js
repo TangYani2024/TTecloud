@@ -1015,8 +1015,8 @@ const app = {
           ps = this.state.currentPwd ? '?pwd=' + encodeURIComponent(this.state.currentPwd) : '';
     const isSmall = (Number(f.size) || 0) < 20 * 1024 * 1024;
     const fastDlBtn = isSmall
-      ? '<a href="/file/' + f.id + '?dl=1' + pq + '" download="' + sn + '" class="btn btn-fast-dl flex-1" style="text-decoration:none;padding:12px;font-size:14px;box-shadow:0 8px 20px rgba(99,102,241,0.35);min-width:130px" onclick="app.closeModal(\'fM\')"><img class="om-emoji" src="/openmoji/26A1.svg" alt="⚡"> 疾速下载</a>'
-      : '<button type="button" class="btn btn-fast-dl flex-1" style="padding:12px;font-size:14px;box-shadow:0 8px 20px rgba(99,102,241,0.35);min-width:130px" data-id="' + f.id + '" onclick="app.smartDownload(this.dataset.id)"><img class="om-emoji" src="/openmoji/26A1.svg" alt="⚡"> 疾速下载</button>';
+      ? '<a href="/file/' + f.id + '?dl=1' + pq + '" download="' + sn + '" class="btn btn-outline flex-1" style="text-decoration:none;padding:12px;font-size:14px;min-width:130px" onclick="app.closeModal(\'fM\')"><img class="om-emoji" src="/openmoji/1F4E5.svg" alt="📥"> 网页下载</a>'
+      : '<button type="button" class="btn btn-outline flex-1" style="padding:12px;font-size:14px;min-width:130px" data-id="' + f.id + '" onclick="app.smartDownload(this.dataset.id)"><img class="om-emoji" src="/openmoji/1F4E5.svg" alt="📥"> 网页下载</button>';
 
     let b = '';
     if (iv) {
@@ -1157,7 +1157,7 @@ const app = {
       return;
     }
 
-    // 2. 20MB ~ 500MB：10 线程并发分片下载至内存 Blob (就地卡片进度条)
+    // 2. 20MB ~ 500MB：3 线程并发分片下载至内存 Blob (就地卡片进度条)
     if (fileSize >= SIZE_20MB && fileSize <= SIZE_500MB) {
       return this.startMemoryChunkDownload(f, dlUrl);
     }
@@ -1182,10 +1182,10 @@ const app = {
     c.innerHTML = 
       '<div style="width:100%;padding:14px;background:rgba(0,0,0,.03);border-radius:12px;border:1px inset var(--cd);text-align:left">' +
         '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">' +
-          '<span id="dl-status" style="color:var(--primary);font-weight:700;font-size:13px;display:flex;align-items:center;gap:6px">' +
-            '<img class="om-emoji" src="/openmoji/26A1.svg" alt="⚡"> 10 线程并发准备中...' +
+          '<span id="dl-status" style="color:var(--tx);font-weight:700;font-size:13px;display:flex;align-items:center;gap:6px">' +
+            '<img class="om-emoji" src="/openmoji/1F4E5.svg" alt="📥"> 3 线程分片准备中...' +
           '</span>' +
-          '<span class="dl-stat-badge">10 线程并发</span>' +
+          '<span class="dl-stat-badge">3 线程分片</span>' +
         '</div>' +
         '<div class="progress-container" style="height:12px;margin:0 0 6px">' +
           '<div id="dl-bar" class="progress-bar" style="width:0%"></div>' +
@@ -1200,7 +1200,7 @@ const app = {
         '</div>' +
       '</div>';
 
-    const threadCount = 10;
+    const threadCount = 3;
     const chunkSize = Math.ceil(fileSize / threadCount);
     const chunks = new Array(threadCount);
     let downloadedBytes = 0;
@@ -1218,7 +1218,7 @@ const app = {
       const by = document.getElementById('dl-bytes');
       const pc = document.getElementById('dl-pct');
       if (bar) bar.style.width = pct + '%';
-      if (st) st.innerHTML = '<img class="om-emoji" src="/openmoji/26A1.svg" alt="⚡"> ' + (pct >= 100 ? '拼装 10 分片 Blob 中...' : '10 线程疾速接收中...');
+      if (st) st.innerHTML = '<img class="om-emoji" src="/openmoji/1F4E5.svg" alt="📥"> ' + (pct >= 100 ? '拼装 3 分片 Blob 中...' : '3 线程接收中...');
       if (sp) sp.innerText = speed + ' MB/s';
       if (by) by.innerText = this.formatBytes(downloadedBytes) + ' / ' + this.formatBytes(fileSize);
       if (pc) pc.innerText = pct + '%';
@@ -1321,10 +1321,10 @@ const app = {
     c.innerHTML = 
       '<div style="width:100%;padding:14px;background:rgba(0,0,0,.03);border-radius:12px;border:1px inset var(--cd);text-align:left">' +
         '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">' +
-          '<span id="dl-status" style="color:var(--primary);font-weight:700;font-size:13px;display:flex;align-items:center;gap:6px">' +
-            '<img class="om-emoji" src="/openmoji/26A1.svg" alt="⚡"> 10 线程磁盘直写准备中...' +
+          '<span id="dl-status" style="color:var(--tx);font-weight:700;font-size:13px;display:flex;align-items:center;gap:6px">' +
+            '<img class="om-emoji" src="/openmoji/1F4E5.svg" alt="📥"> 3 线程磁盘直写准备中...' +
           '</span>' +
-          '<span class="dl-stat-badge">10 线程直写</span>' +
+          '<span class="dl-stat-badge">3 线程直写</span>' +
         '</div>' +
         '<div class="progress-container" style="height:12px;margin:0 0 6px">' +
           '<div id="dl-bar" class="progress-bar" style="width:0%"></div>' +
@@ -1339,7 +1339,7 @@ const app = {
         '</div>' +
       '</div>';
 
-    const threadCount = 10;
+    const threadCount = 3;
     const chunkSize = Math.ceil(fileSize / threadCount);
     let downloadedBytes = 0;
     const startTime = Date.now();
@@ -1362,7 +1362,7 @@ const app = {
       const by = document.getElementById('dl-bytes');
       const pc = document.getElementById('dl-pct');
       if (bar) bar.style.width = pct + '%';
-      if (st) st.innerHTML = '<img class="om-emoji" src="/openmoji/26A1.svg" alt="⚡"> ' + (pct >= 100 ? '正在刷盘固化...' : '10 线程流式直写磁盘中...');
+      if (st) st.innerHTML = '<img class="om-emoji" src="/openmoji/1F4E5.svg" alt="📥"> ' + (pct >= 100 ? '正在刷盘固化...' : '3 线程流式直写磁盘中...');
       if (sp) sp.innerText = speed + ' MB/s';
       if (by) by.innerText = this.formatBytes(downloadedBytes) + ' / ' + this.formatBytes(fileSize);
       if (pc) pc.innerText = pct + '%';
