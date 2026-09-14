@@ -677,32 +677,48 @@ const app = {
     }
     const m = document.getElementById(id);
     if (m) {
-      const visibleOverlays = Array.from(document.querySelectorAll('.modal-overlay'))
-        .filter(x => x.id !== id && x.style.display !== 'none');
-      if (visibleOverlays.length === 0) {
-        document.body.classList.remove('modal-open');
-        document.documentElement.classList.remove('modal-open');
-      }
+      let closed = false;
       const finishClose = () => {
+        if (closed) return;
+        closed = true;
         if (['modal-upload', 'modal-cli', 'modal-settings', 'modal-github'].includes(id)) {
           m.style.display = 'none';
           m.style.opacity = '';
+          m.style.willChange = '';
           const mc = m.querySelector('.modal-content');
           if (mc) {
             mc.style.opacity = '';
             mc.style.transform = '';
+            mc.style.willChange = '';
           }
         } else {
           m.remove();
+        }
+        // 确保退出动画完成后再解除滚动锁定，避免在动画开始的第一帧触发页面重新布局（Reflow）
+        const visibleOverlays = Array.from(document.querySelectorAll('.modal-overlay'))
+          .filter(x => x.id !== id && x.style.display !== 'none');
+        if (visibleOverlays.length === 0) {
+          document.body.classList.remove('modal-open');
+          document.documentElement.classList.remove('modal-open');
         }
       };
       if (!p) history.back();
       try {
         const mc = m.querySelector('.modal-content');
-        if (mc) mc.animate([{ transform: 'scale(1) translateY(0)', opacity: 1 }, { transform: 'scale(0.95) translateY(12px)', opacity: 0 }], { duration: 150, easing: 'ease-in' });
-        const a = m.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 150 });
+        m.style.willChange = 'opacity';
+        if (mc) {
+          mc.style.willChange = 'transform, opacity';
+          mc.animate(
+            [{ transform: 'scale(1) translateY(0)', opacity: 1 }, { transform: 'scale(0.96) translateY(10px)', opacity: 0 }],
+            { duration: 180, easing: 'cubic-bezier(0.25, 1, 0.5, 1)', fill: 'forwards' }
+          );
+        }
+        const a = m.animate(
+          [{ opacity: 1 }, { opacity: 0 }],
+          { duration: 180, easing: 'ease-out', fill: 'forwards' }
+        );
         a.onfinish = finishClose;
-        setTimeout(finishClose, 180);
+        setTimeout(finishClose, 210);
       } catch (e) {
         finishClose();
       }

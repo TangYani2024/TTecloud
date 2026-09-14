@@ -366,6 +366,8 @@ input:focus {
   justify-content: center;
   z-index: 1000;
   overscroll-behavior: contain;
+  isolation: isolate;
+  transform: translateZ(0);
 }
 
 .modal-content {
