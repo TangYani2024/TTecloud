@@ -156,195 +156,137 @@ body.modal-open .admin-fab-container {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  background: var(--primary);
-  color: #fff !important;
-  padding: 10px 16px;
+  gap: 6px;
+  background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
+  color: #ffffff !important;
+  padding: 11px 18px;
   border: none;
-  border-radius: 10px;
+  border-radius: 12px;
   cursor: pointer;
   font-size: 13px;
   font-weight: 700;
   text-decoration: none;
+  transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.18s cubic-bezier(0.2, 0.8, 0.2, 1), filter 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35), 0 1px 2px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .btn:hover {
-  background: var(--ph);
   transform: translateY(-2px) scale(1.02);
-  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.3);
+  filter: brightness(1.08);
 }
 
 .btn:active {
-  transform: scale(0.96);
+  transform: translateY(1px) scale(0.97);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2), inset 0 2px 3px rgba(0, 0, 0, 0.25);
 }
 
 .btn-sm {
-  padding: 6px 12px;
+  padding: 7px 14px;
   font-size: 12px;
-  border-radius: 8px;
+  border-radius: 9px;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
-/* Primary Vibrant Blue */
+/* 1. Primary Royal Blue (网页下载、开始上传) */
 .btn-primary {
-  background: linear-gradient(135deg, #3b82f6, #2563eb);
-  color: #fff !important;
-  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.3);
+  background: linear-gradient(180deg, #3b82f6 0%, #1d4ed8 100%);
+  color: #ffffff !important;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.4), 0 1px 2px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.38);
 }
 .btn-primary:hover {
-  background: linear-gradient(135deg, #2563eb, #1d4ed8);
-  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.45);
+  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.52), inset 0 1px 0 rgba(255, 255, 255, 0.45);
 }
 
-/* Soft Primary Blue */
-.btn-soft-primary {
-  background: rgba(59, 130, 246, 0.09);
-  color: #2563eb !important;
-  border: 1px solid rgba(59, 130, 246, 0.25);
+/* 2. Vibrant Sky / Ocean Blue (复制直链、原生下载、管理登录、返回上级) */
+.btn-soft-primary, .btn-blue {
+  background: linear-gradient(180deg, #0ea5e9 0%, #0284c7 100%);
+  color: #ffffff !important;
+  border: none;
+  box-shadow: 0 4px 14px rgba(2, 132, 199, 0.4), 0 1px 2px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.38);
 }
-.btn-soft-primary:hover {
-  background: rgba(59, 130, 246, 0.16);
-  border-color: rgba(59, 130, 246, 0.45);
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
-}
-
-/* Success Emerald Green */
-.btn-success {
-  background: linear-gradient(135deg, #10b981, #059669);
-  color: #fff !important;
-  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);
-}
-.btn-success:hover {
-  background: linear-gradient(135deg, #059669, #047857);
-  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.45);
+.btn-soft-primary:hover, .btn-blue:hover {
+  box-shadow: 0 6px 20px rgba(2, 132, 199, 0.52), inset 0 1px 0 rgba(255, 255, 255, 0.45);
 }
 
-/* Soft Success */
-.btn-soft-success {
-  background: rgba(16, 185, 129, 0.09);
-  color: #059669 !important;
-  border: 1px solid rgba(16, 185, 129, 0.25);
+/* 3. Emerald Green (设为壁纸、保存云端配置、追更、完成并关闭、同步D1) */
+.btn-success, .btn-soft-success {
+  background: linear-gradient(180deg, #10b981 0%, #059669 100%);
+  color: #ffffff !important;
+  border: none;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.4), 0 1px 2px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.38);
 }
-.btn-soft-success:hover {
-  background: rgba(16, 185, 129, 0.16);
-  border-color: rgba(16, 185, 129, 0.45);
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.15);
-}
-
-/* Creative Purple/Violet */
-.btn-purple {
-  background: linear-gradient(135deg, #8b5cf6, #7c3aed);
-  color: #fff !important;
-  box-shadow: 0 4px 14px rgba(139, 92, 246, 0.3);
-}
-.btn-purple:hover {
-  background: linear-gradient(135deg, #7c3aed, #6d28d9);
-  box-shadow: 0 6px 20px rgba(139, 92, 246, 0.45);
+.btn-success:hover, .btn-soft-success:hover {
+  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.52), inset 0 1px 0 rgba(255, 255, 255, 0.45);
 }
 
-/* Soft Purple */
-.btn-soft-purple {
-  background: rgba(139, 92, 246, 0.09);
-  color: #7c3aed !important;
-  border: 1px solid rgba(139, 92, 246, 0.25);
+/* 4. Creative Purple / Violet (Markdown 复制、目录密码权限设置) */
+.btn-purple, .btn-soft-purple {
+  background: linear-gradient(180deg, #8b5cf6 0%, #6d28d9 100%);
+  color: #ffffff !important;
+  border: none;
+  box-shadow: 0 4px 14px rgba(124, 58, 237, 0.4), 0 1px 2px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.38);
 }
-.btn-soft-purple:hover {
-  background: rgba(139, 92, 246, 0.16);
-  border-color: rgba(139, 92, 246, 0.45);
-  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.15);
-}
-
-/* Cyan / Teal */
-.btn-cyan {
-  background: linear-gradient(135deg, #06b6d4, #0891b2);
-  color: #fff !important;
-  box-shadow: 0 4px 14px rgba(6, 182, 212, 0.3);
-}
-.btn-cyan:hover {
-  background: linear-gradient(135deg, #0891b2, #0e7490);
-  box-shadow: 0 6px 20px rgba(6, 182, 212, 0.45);
+.btn-purple:hover, .btn-soft-purple:hover {
+  box-shadow: 0 6px 20px rgba(124, 58, 237, 0.52), inset 0 1px 0 rgba(255, 255, 255, 0.45);
 }
 
-/* Soft Cyan */
-.btn-soft-cyan {
-  background: rgba(6, 182, 212, 0.09);
-  color: #0891b2 !important;
-  border: 1px solid rgba(6, 182, 212, 0.25);
+/* 5. Cyan / Teal (专属分享链接) */
+.btn-cyan, .btn-soft-cyan {
+  background: linear-gradient(180deg, #06b6d4 0%, #0891b2 100%);
+  color: #ffffff !important;
+  border: none;
+  box-shadow: 0 4px 14px rgba(8, 145, 178, 0.4), 0 1px 2px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.38);
 }
-.btn-soft-cyan:hover {
-  background: rgba(6, 182, 212, 0.16);
-  border-color: rgba(6, 182, 212, 0.45);
-  box-shadow: 0 4px 12px rgba(6, 182, 212, 0.15);
-}
-
-/* Warning Amber */
-.btn-warn {
-  background: linear-gradient(135deg, #f59e0b, #d97706);
-  color: #fff !important;
-  box-shadow: 0 4px 14px rgba(245, 158, 11, 0.3);
-}
-.btn-warn:hover {
-  background: linear-gradient(135deg, #d97706, #b45309);
-  box-shadow: 0 6px 20px rgba(245, 158, 11, 0.45);
+.btn-cyan:hover, .btn-soft-cyan:hover {
+  box-shadow: 0 6px 20px rgba(8, 145, 178, 0.52), inset 0 1px 0 rgba(255, 255, 255, 0.45);
 }
 
-/* Soft Warn */
-.btn-soft-warn {
-  background: rgba(245, 158, 11, 0.09);
-  color: #d97706 !important;
-  border: 1px solid rgba(245, 158, 11, 0.25);
+/* 6. Amber / Warm Orange (移动目录、显隐切换、清理死链) */
+.btn-warn, .btn-soft-warn {
+  background: linear-gradient(180deg, #f59e0b 0%, #d97706 100%);
+  color: #ffffff !important;
+  border: none;
+  box-shadow: 0 4px 14px rgba(217, 119, 6, 0.4), 0 1px 2px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.38);
 }
-.btn-soft-warn:hover {
-  background: rgba(245, 158, 11, 0.16);
-  border-color: rgba(245, 158, 11, 0.45);
-  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.15);
-}
-
-/* Danger Coral Red */
-.btn-danger {
-  background: linear-gradient(135deg, #ef4444, #dc2626);
-  color: #fff !important;
-  box-shadow: 0 4px 14px rgba(239, 68, 68, 0.3);
-}
-.btn-danger:hover {
-  background: linear-gradient(135deg, #dc2626, #b91c1c);
-  box-shadow: 0 6px 20px rgba(239, 68, 68, 0.45);
+.btn-warn:hover, .btn-soft-warn:hover {
+  box-shadow: 0 6px 20px rgba(217, 119, 6, 0.52), inset 0 1px 0 rgba(255, 255, 255, 0.45);
 }
 
-/* Soft Danger */
-.btn-soft-danger {
-  background: rgba(239, 68, 68, 0.09);
-  color: #dc2626 !important;
-  border: 1px solid rgba(239, 68, 68, 0.25);
+/* 7. Crimson Danger (删除、取消下载、删游离、退出登录) */
+.btn-danger, .btn-soft-danger {
+  background: linear-gradient(180deg, #ef4444 0%, #dc2626 100%);
+  color: #ffffff !important;
+  border: none;
+  box-shadow: 0 4px 14px rgba(220, 38, 38, 0.4), 0 1px 2px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.38);
 }
-.btn-soft-danger:hover {
-  background: rgba(239, 68, 68, 0.16);
-  border-color: rgba(239, 68, 68, 0.45);
-  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.15);
+.btn-danger:hover, .btn-soft-danger:hover {
+  box-shadow: 0 6px 20px rgba(220, 38, 38, 0.52), inset 0 1px 0 rgba(255, 255, 255, 0.45);
 }
 
-/* Slate / Terminal Code */
+/* 8. Slate / Geek Graphite (复制 Wget、Curl 等终端直传直取脚本) */
 .btn-slate, .btn-soft-slate {
-  background: rgba(100, 116, 139, 0.08);
-  color: #475569 !important;
-  border: 1px solid rgba(100, 116, 139, 0.2);
+  background: linear-gradient(180deg, #64748b 0%, #475569 100%);
+  color: #ffffff !important;
+  border: none;
+  box-shadow: 0 4px 14px rgba(71, 85, 105, 0.4), 0 1px 2px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 .btn-slate:hover, .btn-soft-slate:hover {
-  background: rgba(100, 116, 139, 0.15);
-  border-color: rgba(100, 116, 139, 0.38);
-  box-shadow: 0 4px 12px rgba(100, 116, 139, 0.12);
+  box-shadow: 0 6px 20px rgba(71, 85, 105, 0.52), inset 0 1px 0 rgba(255, 255, 255, 0.45);
 }
 
-/* Refined Glass Neutral Outline */
+/* 9. Semi-3D Dark Slate Neutral (关闭面板、取消操作) */
 .btn-outline {
-  background: rgba(0, 0, 0, 0.02);
-  color: var(--tx) !important;
-  border: 1px solid var(--cd);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
+  background: linear-gradient(180deg, #64748b 0%, #475569 100%);
+  color: #ffffff !important;
+  border: none;
+  box-shadow: 0 4px 14px rgba(51, 65, 85, 0.32), 0 1px 2px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
 }
 .btn-outline:hover {
-  background: rgba(0, 0, 0, 0.06);
-  border-color: rgba(0, 0, 0, 0.18);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 6px 18px rgba(51, 65, 85, 0.48), inset 0 1px 0 rgba(255, 255, 255, 0.38);
 }
 
 input, select {
