@@ -436,7 +436,13 @@ const app = {
       }
       if (rs.mode === 'folders') this.renderFolders(rs.data);
       else this.renderFiles(rs.data);
-    } catch (e) {}
+    } catch (e) {
+      console.error('fetchData error:', e);
+      const a = document.getElementById('dynamic-area');
+      if (a) {
+        a.innerHTML = '<div style="text-align:center;padding:60px 20px;color:#ef4444;"><div style="font-size:28px;margin-bottom:10px;">⚠️</div><div style="font-weight:bold;margin-bottom:6px;">加载失败，请刷新重试</div><div style="font-size:12px;color:gray;">' + this.escapeHTML(e.message || e) + '</div></div>';
+      }
+    }
   },
 
   getFileIconSvg(fileName) {
