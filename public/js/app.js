@@ -62,6 +62,10 @@ const app = {
     currentPwd: '',
     fileList: []
   },
+  dataCache: {},
+  clearCache() {
+    this.dataCache = {};
+  },
   configLoaded: false,
   settings: {
     expect: localStorage.getItem('cfg_expect') === 'true',
@@ -795,26 +799,21 @@ const app = {
     }, 400);
   },
 
-  async fetchData() {
+  async fetchData(forceRefresh = false) {
     const a = document.getElementById('dynamic-area');
     if (!a) return;
-    a.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;padding:60px 0;color:var(--primary);"><svg width="48" height="48" viewBox="0 0 50 50" style="animation:spin 2s linear infinite;"><circle cx="25" cy="25" r="20" fill="none" stroke="var(--cd)" stroke-width="4"></circle><circle cx="25" cy="25" r="20" fill="none" stroke="var(--primary)" stroke-width="4" stroke-linecap="round" stroke-dasharray="90 150" style="animation:dash 1.5s ease-in-out infinite;"></circle></svg><div style="margin-top:15px;font-size:13px;font-weight:bold;letter-spacing:1px;animation:pulse 1.5s ease-in-out infinite;">核心引擎跃迁中...</div></div>';
-    
-    try {
-      let u = '/api/data?view=' + this.state.view;
-      if (this.state.folder !== null) u += '&folder=' + encodeURIComponent(this.state.folder);
-      if (this.state.q) u += '&q=' + encodeURIComponent(this.state.q);
-      
-      const r = await fetch(u);
-      if (r.status === 401) {
-        alert('权限验证失败，或管理员状态已失效');
-        this.goHome();
-        return;
-      }
-      
-      const rs = await r.json();
+
+    let u = '/api/data?view=' + this.state.view;
+    if (this.state.folder !== null) u += '&folder=' + encodeURIComponent(this.state.folder);
+    if (this.state.q) u += '&q=' + encodeURIComponent(this.state.q);
+
+    const cacheKey = u;
+    const cached = this.dataCache[cacheKey];
+    const isSearching = !!this.state.q;
+
+    // 辅助方法：更新 UI 框架（面包屑、导航条、容量卡片、退出按钮等）
+    const updateUIFrame = (rs) => {
       this.state.isAdmin = rs.isAdmin;
-      
       const authBtn = document.getElementById('auth-btn');
       if (authBtn) {
         authBtn.innerHTML = rs.isAdmin 
@@ -851,18 +850,60 @@ const app = {
       } else {
         document.getElementById('storage-card').style.display = 'none';
       }
-      
+    };
+
+    // 辅助方法：渲染核心内容列表
+    const applyRender = (rs) => {
       this.state.fileList = rs.data || [];
-      if (rs.mode === 'folders') {
-        this.state.folderList = rs.data || [];
-      }
+      if (rs.mode === 'folders') this.state.folderList = rs.data || [];
       const renderDom = () => {
         if (rs.mode === 'folders') this.renderFolders(rs.data);
         else this.renderFiles(rs.data);
       };
-      
       if (document.startViewTransition) document.startViewTransition(() => renderDom());
       else renderDom();
+    };
+
+    // SWR 命中：若本地已有内存缓存且非强制刷新，0毫秒直接展现
+    if (cached && !forceRefresh) {
+      updateUIFrame(cached);
+      applyRender(cached);
+    } else if (!isSearching) {
+      // 未命中缓存时，采用骨架屏卡片占位，不使用粗暴的白屏全清
+      const inFolder = this.state.folder !== null;
+      document.getElementById('btn-back').style.display = inFolder ? 'inline-flex' : 'none';
+      const folderDisplayName = inFolder ? (this.state.folder.trim() || '空白目录') : '根目录';
+      document.getElementById('breadcrumb').innerHTML = inFolder 
+        ? '<img class="om-emoji" src="/openmoji/1F4C2.svg" alt="📂"> ' + this.escapeHTML(folderDisplayName) 
+        : '<img class="om-emoji" src="/openmoji/1F4C1.svg" alt="📁"> 根目录';
+
+      let skHtml = '<div class="grid-view">';
+      for (let i = 0; i < 6; i++) {
+        skHtml += '<div class="card skeleton-card" style="padding:14px;border-radius:12px;height:120px;display:flex;flex-direction:column;justify-content:space-between">' +
+                    '<div class="skeleton-box" style="width:48px;height:48px;margin:0 auto 10px;border-radius:10px"></div>' +
+                    '<div class="skeleton-box" style="width:70%;height:12px;margin:0 auto 6px"></div>' +
+                    '<div class="skeleton-box" style="width:40%;height:10px;margin:0 auto"></div>' +
+                  '</div>';
+      }
+      skHtml += '</div>';
+      a.innerHTML = skHtml;
+    } else {
+      a.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;padding:60px 0;color:var(--primary);"><svg width="48" height="48" viewBox="0 0 50 50" style="animation:spin 2s linear infinite;"><circle cx="25" cy="25" r="20" fill="none" stroke="var(--cd)" stroke-width="4"></circle><circle cx="25" cy="25" r="20" fill="none" stroke="var(--primary)" stroke-width="4" stroke-linecap="round" stroke-dasharray="90 150" style="animation:dash 1.5s ease-in-out infinite;"></circle></svg><div style="margin-top:15px;font-size:13px;font-weight:bold;letter-spacing:1px;animation:pulse 1.5s ease-in-out infinite;">搜索中...</div></div>';
+    }
+    
+    try {
+      const r = await fetch(u);
+      if (r.status === 401) {
+        alert('权限验证失败，或管理员状态已失效');
+        this.clearCache();
+        this.goHome();
+        return;
+      }
+      
+      const rs = await r.json();
+      this.dataCache[cacheKey] = rs;
+      updateUIFrame(rs);
+      applyRender(rs);
     } catch (e) {}
   },
 
@@ -1518,7 +1559,8 @@ const app = {
       });
       const rs = await r.json();
       if (rs.msg) alert(rs.msg);
-      this.fetchData();
+      this.clearCache();
+      this.fetchData(true);
     } catch (e) {
       alert('操作失败');
     }
@@ -1534,7 +1576,8 @@ const app = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'lock_folder', folder: fName, password: p })
     });
-    this.fetchData();
+    this.clearCache();
+    this.fetchData(true);
   },
 
   switchUploadMode(m) {
@@ -1734,7 +1777,8 @@ const app = {
         }
         document.getElementById('file-name-display').innerHTML = '<img class="om-emoji" src="/openmoji/2795.svg" alt="➕"> 点击选择多文件，或直接拖拽文件夹到此处';
         document.getElementById('queue-info').innerText = '完美支持多文件、多级文件夹拖拽识别并发';
-        this.fetchData();
+        this.clearCache();
+        this.fetchData(true);
       }, 2000);
     }
     this.isUploading = false;

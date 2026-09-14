@@ -650,10 +650,16 @@ export async function onRequest(context) {
         if (q) { qry += " AND f.name LIKE ?"; prm.push('%' + q + '%'); }
         const { results: R } = await e.DB.prepare(qry + " ORDER BY f.upload_at DESC").bind(...prm).all();
         let fF = [];
+        let folderUnlockedMap = {};
         for (const f of R) {
           if (!iA && f.password) {
-            const lM = C.match(new RegExp('(?:^|; )lock_' + await hashSha256(f.folder || '') + '=([^;]*)'));
-            if (!lM || decodeURIComponent(lM[1]) !== f.password) continue;
+            const fKey = f.folder || '';
+            if (!(fKey in folderUnlockedMap)) {
+              const hash = await hashSha256(fKey);
+              const lM = C.match(new RegExp('(?:^|; )lock_' + hash + '=([^;]*)'));
+              folderUnlockedMap[fKey] = !!(lM && decodeURIComponent(lM[1]) === f.password);
+            }
+            if (!folderUnlockedMap[fKey]) continue;
           }
           fF.push({ id: f.id, name: f.name, size: f.size, folder: f.folder || '', is_hidden: f.is_hidden, upload_at: f.upload_at });
         }

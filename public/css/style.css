@@ -411,6 +411,23 @@ input:focus {
   50% { opacity: 0.5; }
 }
 
+@keyframes skeletonShimmer {
+  0% { opacity: 0.45; }
+  50% { opacity: 0.85; }
+  100% { opacity: 0.45; }
+}
+
+.skeleton-card {
+  pointer-events: none;
+  border-color: var(--cd);
+  animation: skeletonShimmer 1.2s ease-in-out infinite;
+}
+
+.skeleton-box {
+  background: rgba(0, 0, 0, 0.06);
+  border-radius: 6px;
+}
+
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
