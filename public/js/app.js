@@ -164,7 +164,7 @@ const app = {
       } else {
         btn.disabled = false;
         btn.style.opacity = '1';
-        btn.innerHTML = '<img class="om-emoji" src="/openmoji/26A1.svg" alt="⚡"> 发起多线程疾速并发上传';
+        btn.innerHTML = '<img class="om-emoji" src="/openmoji/1F4E4.svg" alt="📤"> 开始并发上传';
       }
     }
     this.openStaticModal('modal-upload');
