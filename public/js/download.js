@@ -1,4 +1,4 @@
-﻿Object.assign(app, {
+Object.assign(app, {
   currentDlAbort: null,
 
   async smartDownload(fileId) {
@@ -357,8 +357,16 @@
     document.body.classList.add('modal-open');
     document.documentElement.classList.add('modal-open');
     const mc = m.querySelector('.modal-content');
+    m.style.willChange = 'opacity';
     mc.style.willChange = 'transform, opacity';
-    m.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, fill: 'forwards' });
-    mc.animate([{ transform: 'scale(0.95) translateY(15px)', opacity: 0 }, { transform: 'scale(1) translateY(0)', opacity: 1 }], { duration: 350, easing: 'cubic-bezier(0.175,0.885,0.32,1.275)', fill: 'forwards' });
+    const a1 = m.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 320, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', fill: 'forwards' });
+    const a2 = mc.animate(
+      [{ transform: 'scale(0.92) translateY(18px)', opacity: 0 }, { transform: 'scale(1) translateY(0)', opacity: 1 }],
+      { duration: 380, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', fill: 'forwards' }
+    );
+    a2.onfinish = () => {
+      mc.style.willChange = '';
+      m.style.willChange = '';
+    };
   },
 });

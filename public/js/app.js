@@ -78,11 +78,11 @@ const app = {
     try {
       m.style.willChange = 'opacity';
       if (mc) mc.style.willChange = 'transform, opacity';
-      const a1 = m.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 150 });
+      const a1 = m.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 320, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', fill: 'forwards' });
       if (mc) {
         const a2 = mc.animate(
-          [{ transform: 'scale(0.96) translateY(10px)', opacity: 0 }, { transform: 'scale(1) translateY(0)', opacity: 1 }],
-          { duration: 200, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' }
+          [{ transform: 'scale(0.92) translateY(18px)', opacity: 0 }, { transform: 'scale(1) translateY(0)', opacity: 1 }],
+          { duration: 380, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', fill: 'forwards' }
         );
         a2.onfinish = () => {
           if (mc) mc.style.willChange = '';
@@ -582,9 +582,17 @@ const app = {
     this.bindAdminCmdBtns(f);
 
     const mc = m.querySelector('.modal-content');
-    const a1 = m.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, fill: 'forwards' });
-    const a2 = mc.animate([{ transform: 'scale(0.95) translateY(15px)', opacity: 0 }, { transform: 'scale(1) translateY(0)', opacity: 1 }], { duration: 350, easing: 'cubic-bezier(0.175,0.885,0.32,1.275)', fill: 'forwards' });
-    a2.onfinish = () => { mc.style.willChange = ''; };
+    m.style.willChange = 'opacity';
+    mc.style.willChange = 'transform, opacity';
+    const a1 = m.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 320, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', fill: 'forwards' });
+    const a2 = mc.animate(
+      [{ transform: 'scale(0.92) translateY(18px)', opacity: 0 }, { transform: 'scale(1) translateY(0)', opacity: 1 }],
+      { duration: 380, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', fill: 'forwards' }
+    );
+    a2.onfinish = () => {
+      mc.style.willChange = '';
+      m.style.willChange = '';
+    };
   },
 
   getFileActionButtons(f) {
@@ -709,16 +717,16 @@ const app = {
         if (mc) {
           mc.style.willChange = 'transform, opacity';
           mc.animate(
-            [{ transform: 'scale(1) translateY(0)', opacity: 1 }, { transform: 'scale(0.96) translateY(10px)', opacity: 0 }],
-            { duration: 180, easing: 'cubic-bezier(0.25, 1, 0.5, 1)', fill: 'forwards' }
+            [{ transform: 'scale(1) translateY(0)', opacity: 1 }, { transform: 'scale(0.94) translateY(14px)', opacity: 0 }],
+            { duration: 240, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)', fill: 'forwards' }
           );
         }
         const a = m.animate(
           [{ opacity: 1 }, { opacity: 0 }],
-          { duration: 180, easing: 'ease-out', fill: 'forwards' }
+          { duration: 240, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)', fill: 'forwards' }
         );
         a.onfinish = finishClose;
-        setTimeout(finishClose, 210);
+        setTimeout(finishClose, 270);
       } catch (e) {
         finishClose();
       }
