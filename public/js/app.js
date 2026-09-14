@@ -41,6 +41,7 @@ const app = {
   fabExpanded: false,
 
   toggleFabOrUpload() {
+    if (document.body.classList.contains('modal-open')) return;
     if (this.fabExpanded) {
       this.collapseFab();
       this.showUploadModal();
@@ -146,6 +147,12 @@ const app = {
           app.closeModal(m.id, 1);
         }
       });
+    });
+
+    document.addEventListener('click', e => {
+      if (e.target && e.target.classList && e.target.classList.contains('modal-overlay')) {
+        this.closeModal(e.target.id);
+      }
     });
 
     window.addEventListener('resize', () => {
@@ -554,6 +561,7 @@ const app = {
   },
 
   showFileAction(id) {
+    this.collapseFab();
     const f = this.state.fileList.find(x => x.id === id);
     if (!f) return;
     history.pushState({ mdl: id }, '');
