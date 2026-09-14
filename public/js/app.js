@@ -582,9 +582,9 @@ const app = {
     this.bindAdminCmdBtns(f);
 
     const mc = m.querySelector('.modal-content');
-    mc.style.willChange = 'transform, opacity';
-    m.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, fill: 'forwards' });
-    mc.animate([{ transform: 'scale(0.95) translateY(15px)', opacity: 0 }, { transform: 'scale(1) translateY(0)', opacity: 1 }], { duration: 350, easing: 'cubic-bezier(0.175,0.885,0.32,1.275)', fill: 'forwards' });
+    const a1 = m.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, fill: 'forwards' });
+    const a2 = mc.animate([{ transform: 'scale(0.95) translateY(15px)', opacity: 0 }, { transform: 'scale(1) translateY(0)', opacity: 1 }], { duration: 350, easing: 'cubic-bezier(0.175,0.885,0.32,1.275)', fill: 'forwards' });
+    a2.onfinish = () => { mc.style.willChange = ''; };
   },
 
   getFileActionButtons(f) {
