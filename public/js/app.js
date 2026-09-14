@@ -1663,7 +1663,7 @@ const app = {
       if (upBtn) {
         upBtn.disabled = false;
         upBtn.style.opacity = '1';
-        upBtn.innerHTML = '<img class="om-emoji" src="/openmoji/26A1.svg" alt="⚡"> 发起多线程疾速并发上传';
+        upBtn.innerHTML = '<img class="om-emoji" src="/openmoji/1F4E4.svg" alt="📤"> 开始并发上传';
       }
       document.getElementById('file-name-display').innerHTML = '<img class="om-emoji" src="/openmoji/2795.svg" alt="➕"> 点击选择多文件，或直接拖拽文件夹到此处';
       document.getElementById('queue-info').innerText = '完美支持多文件、多级文件夹拖拽识别并发';
@@ -1730,7 +1730,7 @@ const app = {
         if (upBtn) {
           upBtn.disabled = false;
           upBtn.style.opacity = '1';
-          upBtn.innerHTML = '<img class="om-emoji" src="/openmoji/26A1.svg" alt="⚡"> 发起多线程疾速并发上传';
+          upBtn.innerHTML = '<img class="om-emoji" src="/openmoji/1F4E4.svg" alt="📤"> 开始并发上传';
         }
         document.getElementById('file-name-display').innerHTML = '<img class="om-emoji" src="/openmoji/2795.svg" alt="➕"> 点击选择多文件，或直接拖拽文件夹到此处';
         document.getElementById('queue-info').innerText = '完美支持多文件、多级文件夹拖拽识别并发';
@@ -1772,13 +1772,13 @@ const app = {
     updateEl('预热中...', 0);
 
     try {
-      let cs = f.size <= 52428800 ? f.size : f.size <= 104857600 ? 5242880 : f.size <= 524288000 ? 10485760 : 20971520,
+      let cs = f.size <= 20971520 ? f.size : f.size <= 104857600 ? 5242880 : f.size <= 524288000 ? 10485760 : 20971520,
           fHash = await this.getFastHash(f.name + f.size + f.lastModified + cs),
           ctrl = new AbortController();
       this.activeControllers[task.id] = ctrl;
 
-      if (f.size <= 52428800) {
-        updateEl('极速直传...', 0);
+      if (f.size <= 20971520) {
+        updateEl('直传中...', 0);
         await new Promise((resolve, reject) => {
           const xhr = new XMLHttpRequest();
           xhr.open('POST', '/api/upload/single', true);
@@ -1861,6 +1861,20 @@ const app = {
         if (uBytes > f.size) uBytes = f.size;
         let ue = null, pa = {};
 
+        // 串行队列保证 D1 数据库写入时不产生行锁和 JSON 覆写竞争
+        let syncChain = Promise.resolve();
+        const safeSyncPart = (partNum, etagVal) => {
+          syncChain = syncChain.then(() => {
+            if (this.cancelFlag) return;
+            return fetch('/api/upload/sync_part', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ fileHash: fHash, partNumber: partNum, etag: etagVal })
+            }).catch(() => {});
+          });
+          return syncChain;
+        };
+
         const cw = async (ic) => {
           let ct = ic;
           while (tpList.length > 0 && !ue && !this.cancelFlag) {
@@ -1909,11 +1923,7 @@ const app = {
                   }, 60000);
                   if (!r.ok) throw new Error('D');
                   et = r.headers.get('ETag').replace(/"/g, '');
-                  fetch('/api/upload/sync_part', {
-                    method: 'POST',
-                    headers: { 'content-type': 'application/json' },
-                    body: JSON.stringify({ fileHash: fHash, partNumber: pn, etag: et })
-                  }).catch(() => {});
+                  safeSyncPart(pn, et);
                 }
 
                 ed[pn] = et;
@@ -1941,6 +1951,7 @@ const app = {
         let ws = [];
         for (let i = 0; i < 8; i++) ws.push(cw(i % 3 === 0 ? 'CF_PROXY' : 'B2_DIRECT'));
         await Promise.all(ws);
+        await syncChain;
         if (ue) throw ue;
         if (this.cancelFlag) throw new DOMException('AbortError', 'AbortError');
 
