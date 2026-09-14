@@ -7,9 +7,10 @@ const CONFIG = {
   S3_ENDPOINT: ((appConfig && appConfig.s3 && appConfig.s3.endpoint) || (appConfig && appConfig.S3_ENDPOINT) || 'https://s3.us-east-005.backblazeb2.com').replace(/\/+$/, ''),
   BUCKETS: {
     RESOURCE: (appConfig && appConfig.s3 && appConfig.s3.buckets && appConfig.s3.buckets.resource) || (appConfig && appConfig.BUCKETS && appConfig.BUCKETS.RESOURCE) || 'tangyani-ziyuan',
-    IMAGE: (appConfig && appConfig.s3 && appConfig.s3.buckets && appConfig.s3.buckets.image) || (appConfig && appConfig.BUCKETS && appConfig.BUCKETS.IMAGE) || 'tangyani-tuchuang'
+    IMAGE: (appConfig && appConfig.s3 && appConfig.s3.buckets && typeof appConfig.s3.buckets.image === 'string') ? appConfig.s3.buckets.image : ((appConfig && appConfig.BUCKETS && typeof appConfig.BUCKETS.IMAGE === 'string') ? appConfig.BUCKETS.IMAGE : '')
   }
 };
+const HAS_IMAGE = !!CONFIG.BUCKETS.IMAGE;
 
 let globalCachedTotalSize = 0, globalLastSizeCalcTime = 0;
 let globalSiteConfig = null, globalConfigTime = 0;
@@ -291,7 +292,8 @@ export async function onRequest(context) {
     const res = await next();
     if (res && res.status === 200) {
       let html = await res.text();
-      html = html.replace('</head>', `<script>window.__CFG__=${JSON.stringify(cfg)};</script></head>`);
+      const clientCfg = Object.assign({}, cfg, { hasImageBucket: HAS_IMAGE });
+      html = html.replace('</head>', `<script>window.__CFG__=${JSON.stringify(clientCfg)};</script></head>`);
       const h = new Headers(res.headers);
       h.set('Content-Type', 'text/html;charset=UTF-8');
       return new Response(html, { status: 200, headers: h });
@@ -619,7 +621,7 @@ export async function onRequest(context) {
 
       if (P === '/api/data' && req.method === 'GET') {
         const viewM = U.searchParams.get('view') || 'resource';
-        let bk = viewM === 'image' ? CONFIG.BUCKETS.IMAGE : CONFIG.BUCKETS.RESOURCE;
+        let bk = (viewM === 'image' && HAS_IMAGE) ? CONFIG.BUCKETS.IMAGE : CONFIG.BUCKETS.RESOURCE;
         const hasFolder = U.searchParams.has('folder');
         const tF = hasFolder ? U.searchParams.get('folder') : null;
         const q = U.searchParams.get('q') || '';
@@ -631,6 +633,7 @@ export async function onRequest(context) {
           const { results: R } = await e.DB.prepare("SELECT f.folder, COUNT(f.id) as count, SUM(f.size) as size, m.password FROM files f LEFT JOIN folder_meta m ON f.folder = m.name WHERE f.type=? " + (iA ? '' : 'AND f.is_hidden=0') + " GROUP BY f.folder ORDER BY f.folder ASC").bind(bk).all();
           return Response.json({
             isAdmin: iA,
+            hasImage: HAS_IMAGE,
             totalSize: globalCachedTotalSize,
             maxSize: CONFIG.MAX_STORAGE_BYTES,
             mode: 'folders',
@@ -665,6 +668,7 @@ export async function onRequest(context) {
         }
         return Response.json({
           isAdmin: iA,
+          hasImage: HAS_IMAGE,
           totalSize: globalCachedTotalSize,
           maxSize: CONFIG.MAX_STORAGE_BYTES,
           mode: 'files',
@@ -684,7 +688,7 @@ export async function onRequest(context) {
       }
 
       if (P === '/api/admin/cli_presign' && req.method === 'POST') {
-        const d = await req.json(), bk = d.type === 'image' ? CONFIG.BUCKETS.IMAGE : CONFIG.BUCKETS.RESOURCE;
+        const d = await req.json(), bk = (d.type === 'image' && HAS_IMAGE) ? CONFIG.BUCKETS.IMAGE : CONFIG.BUCKETS.RESOURCE;
         const bp = Date.now() + '_' + d.filename.replace(/^.*[\\\/]/, '').replace(/[:*?"<>|]/g, '_');
         const url = await awsS3Presign(CONFIG.S3_ENDPOINT + '/' + bk + '/' + encodeURIComponent(bp), e, 'PUT', 86400);
         return Response.json({ url, b2Path: bp });
@@ -709,7 +713,7 @@ export async function onRequest(context) {
           }
         }
         if (['sync_d1_ghosts', 'sync_b2_orphans', 'sync_b2_to_d1'].includes(p.action)) {
-          const aw = getS3Client(e), vM = p.viewMode || 'resource', bk = vM === 'image' ? CONFIG.BUCKETS.IMAGE : CONFIG.BUCKETS.RESOURCE;
+          const aw = getS3Client(e), vM = p.viewMode || 'resource', bk = (vM === 'image' && HAS_IMAGE) ? CONFIG.BUCKETS.IMAGE : CONFIG.BUCKETS.RESOURCE;
           let s3 = [], iT = true, cT = '';
           while (iT) {
             let lU = CONFIG.S3_ENDPOINT + '/' + bk + '?list-type=2';
@@ -789,7 +793,7 @@ export async function onRequest(context) {
       if (P === '/api/upload/sessions') return Response.json((await e.DB.prepare("SELECT * FROM upload_sessions").all()).results);
 
       if (P === '/api/upload/abort') {
-        const d = await req.json(), tp = d.type || 'resource', bk = tp === 'image' ? CONFIG.BUCKETS.IMAGE : CONFIG.BUCKETS.RESOURCE;
+        const d = await req.json(), tp = d.type || 'resource', bk = (tp === 'image' && HAS_IMAGE) ? CONFIG.BUCKETS.IMAGE : CONFIG.BUCKETS.RESOURCE;
         if (d.uploadId && d.b2Path) await awsS3Fetch(CONFIG.S3_ENDPOINT + '/' + bk + '/' + encodeURIComponent(d.b2Path) + '?uploadId=' + d.uploadId, { method: 'DELETE' }, e);
         if (d.fileHash) await e.DB.prepare("DELETE FROM upload_sessions WHERE file_hash=?").bind(d.fileHash).run();
         return Response.json({ ok: true });
@@ -802,7 +806,7 @@ export async function onRequest(context) {
 
       if (P === '/api/upload/single') {
         const fn = decodeURIComponent(req.headers.get('x-filename')).replace(/^.*[\\\/]/, '').replace(/[:*?"<>|]/g, '_');
-        const bp = Date.now() + '_' + fn, tp = req.headers.get('x-type') || 'resource', bk = tp === 'image' ? CONFIG.BUCKETS.IMAGE : CONFIG.BUCKETS.RESOURCE;
+        const bp = Date.now() + '_' + fn, tp = req.headers.get('x-type') || 'resource', bk = (tp === 'image' && HAS_IMAGE) ? CONFIG.BUCKETS.IMAGE : CONFIG.BUCKETS.RESOURCE;
         const rs = await awsS3Fetch(CONFIG.S3_ENDPOINT + '/' + bk + '/' + encodeURIComponent(bp), {
           method: 'PUT',
           headers: { 'Content-Type': req.headers.get('content-type') || 'application/octet-stream', 'x-amz-content-sha256': 'UNSIGNED-PAYLOAD' },
@@ -817,7 +821,7 @@ export async function onRequest(context) {
       if (P === '/api/upload/start') {
         const d = await req.json();
         d.filename = d.filename.replace(/^.*[\\\/]/, '').replace(/[:*?"<>|]/g, '_');
-        const bp = Date.now() + '_' + d.filename, tp = d.type || 'resource', bk = tp === 'image' ? CONFIG.BUCKETS.IMAGE : CONFIG.BUCKETS.RESOURCE;
+        const bp = Date.now() + '_' + d.filename, tp = d.type || 'resource', bk = (tp === 'image' && HAS_IMAGE) ? CONFIG.BUCKETS.IMAGE : CONFIG.BUCKETS.RESOURCE;
         const rs = await awsS3Fetch(CONFIG.S3_ENDPOINT + '/' + bk + '/' + encodeURIComponent(bp) + '?uploads', { method: 'POST', headers: { 'Content-Type': d.contentType } }, e);
         if (!rs.ok) throw new Error(await rs.text());
         const ui = (await rs.text()).match(/<UploadId>(.*?)<\/UploadId>/)[1];
@@ -826,7 +830,7 @@ export async function onRequest(context) {
       }
 
       if (P === '/api/upload/presign_batch') {
-        const d = await req.json(), tp = d.type || 'resource', bk = tp === 'image' ? CONFIG.BUCKETS.IMAGE : CONFIG.BUCKETS.RESOURCE;
+        const d = await req.json(), tp = d.type || 'resource', bk = (tp === 'image' && HAS_IMAGE) ? CONFIG.BUCKETS.IMAGE : CONFIG.BUCKETS.RESOURCE;
         let u = {};
         for (const p of d.parts) u[p] = await awsS3Presign(CONFIG.S3_ENDPOINT + '/' + bk + '/' + encodeURIComponent(d.b2Path) + '?partNumber=' + p + '&uploadId=' + d.uploadId, e, 'PUT', 86400);
         return Response.json(u);
@@ -841,7 +845,7 @@ export async function onRequest(context) {
       if (P === '/api/upload/part') {
         const h = { 'x-amz-content-sha256': 'UNSIGNED-PAYLOAD' };
         if (req.headers.get('content-length')) h['Content-Length'] = req.headers.get('content-length');
-        const tp = req.headers.get('x-type') || 'resource', bk = tp === 'image' ? CONFIG.BUCKETS.IMAGE : CONFIG.BUCKETS.RESOURCE;
+        const tp = req.headers.get('x-type') || 'resource', bk = (tp === 'image' && HAS_IMAGE) ? CONFIG.BUCKETS.IMAGE : CONFIG.BUCKETS.RESOURCE;
         const rs = await awsS3Fetch(CONFIG.S3_ENDPOINT + '/' + bk + '/' + encodeURIComponent(decodeURIComponent(req.headers.get('x-b2-path'))) + '?partNumber=' + req.headers.get('x-part-number') + '&uploadId=' + req.headers.get('x-file-id'), { method: 'PUT', headers: h, body: req.body }, e);
         if (!rs.ok) throw new Error(await rs.text());
         const fh = req.headers.get('x-file-hash'), et = rs.headers.get('ETag').replace(/"/g, ''), pn = parseInt(req.headers.get('x-part-number'));
@@ -852,7 +856,7 @@ export async function onRequest(context) {
       if (P === '/api/upload/finish') {
         const d = await req.json();
         const xml = '<CompleteMultipartUpload>' + d.etagArray.map((t, i) => '<Part><PartNumber>' + (i + 1) + '</PartNumber><ETag>' + t + '</ETag></Part>').join('') + '</CompleteMultipartUpload>';
-        const tp = d.type || 'resource', bk = tp === 'image' ? CONFIG.BUCKETS.IMAGE : CONFIG.BUCKETS.RESOURCE;
+        const tp = d.type || 'resource', bk = (tp === 'image' && HAS_IMAGE) ? CONFIG.BUCKETS.IMAGE : CONFIG.BUCKETS.RESOURCE;
         const rs = await awsS3Fetch(CONFIG.S3_ENDPOINT + '/' + bk + '/' + encodeURIComponent(d.b2_path) + '?uploadId=' + d.fileId, { method: 'POST', body: xml }, e);
         if (!rs.ok) throw new Error(await rs.text());
         await e.DB.prepare("INSERT INTO files (id,name,b2_path,type,size,folder) VALUES (?,?,?,?,?,?)").bind(crypto.randomUUID(), d.name, d.b2_path, bk, d.size, d.folder).run();

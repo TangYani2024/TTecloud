@@ -4,6 +4,7 @@ const app = {
     folder: null,
     q: '',
     isAdmin: false,
+    hasImage: (window.__CFG__ && window.__CFG__.hasImageBucket !== undefined) ? !!window.__CFG__.hasImageBucket : true,
     currentPwd: '',
     fileList: []
   },
@@ -301,10 +302,16 @@ const app = {
     const h = window.location.hash.slice(1);
     const p = new URLSearchParams(h);
     this.state.view = p.get('view') || 'resource';
+    if (!this.state.hasImage && this.state.view === 'image') {
+      this.state.view = 'resource';
+    }
     this.state.folder = p.has('folder') ? p.get('folder') : null;
     this.state.q = p.get('q') || '';
     const searchInput = document.getElementById('search-input');
     if (searchInput) searchInput.value = this.state.q;
+
+    const imgTab = document.getElementById('tab-image');
+    if (imgTab) imgTab.style.display = this.state.hasImage ? '' : 'none';
 
     document.querySelectorAll('#main-nav .nav-tab').forEach(b => {
       b.classList.toggle('active', b.id === 'tab-' + this.state.view);
@@ -395,7 +402,18 @@ const app = {
       
       const rs = await r.json();
       this.state.isAdmin = rs.isAdmin;
+      if (rs.hasImage !== undefined) {
+        this.state.hasImage = !!rs.hasImage;
+      }
       
+      const imgTab = document.getElementById('tab-image');
+      if (imgTab) imgTab.style.display = this.state.hasImage ? '' : 'none';
+
+      if (!this.state.hasImage && this.state.view === 'image') {
+        this.switchView('resource');
+        return;
+      }
+
       const authBtn = document.getElementById('auth-btn');
       if (authBtn) {
         authBtn.innerHTML = rs.isAdmin 
@@ -404,7 +422,7 @@ const app = {
       }
       
       const inFolder = this.state.folder !== null;
-      document.getElementById('main-nav').style.display = rs.isAdmin ? 'flex' : 'none';
+      document.getElementById('main-nav').style.display = (rs.isAdmin && this.state.hasImage) ? 'flex' : 'none';
       const fab = document.getElementById('admin-fab-container');
       if (fab) fab.style.display = rs.isAdmin ? 'flex' : 'none';
       document.getElementById('btn-back').style.display = inFolder ? 'inline-flex' : 'none';
