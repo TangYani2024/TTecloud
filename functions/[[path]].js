@@ -721,11 +721,11 @@ export async function onRequest(context) {
         }
         try {
           if (Date.now() - globalLastSizeCalcTime > 600000) {
-            globalCachedTotalSize = (await e.DB.prepare("SELECT SUM(size) as t FROM files").first())?.t || 0;
+            globalCachedTotalSize = (await e.DB.prepare("SELECT SUM(size) as t FROM files WHERE b2_path NOT LIKE '.sys/%' AND b2_path NOT LIKE '%__site_config__%'").first())?.t || 0;
             globalLastSizeCalcTime = Date.now();
           }
           if (!hasFolder && !q) {
-            const { results: R } = await e.DB.prepare("SELECT f.folder, COUNT(f.id) as count, SUM(f.size) as size, m.password FROM files f LEFT JOIN folder_meta m ON f.folder = m.name WHERE f.type=? " + (iA ? '' : 'AND f.is_hidden=0') + " GROUP BY f.folder ORDER BY f.folder ASC").bind(bk).all();
+            const { results: R } = await e.DB.prepare("SELECT f.folder, COUNT(f.id) as count, SUM(f.size) as size, m.password FROM files f LEFT JOIN folder_meta m ON f.folder = m.name WHERE f.type=? AND f.b2_path NOT LIKE '.sys/%' AND f.b2_path NOT LIKE '%__site_config__%' " + (iA ? '' : 'AND f.is_hidden=0') + " GROUP BY f.folder ORDER BY f.folder ASC").bind(bk).all();
             return Response.json({
               isAdmin: iA,
               hasImage: HAS_IMAGE,
@@ -736,7 +736,7 @@ export async function onRequest(context) {
               data: (R || []).map(r => ({ name: r.folder ?? '', count: r.count, size: r.size, locked: !!r.password }))
             }, { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
           }
-          let qry = "SELECT f.*, m.password FROM files f LEFT JOIN folder_meta m ON f.folder = m.name WHERE f.type=? " + (iA ? '' : 'AND f.is_hidden=0'), prm = [bk];
+          let qry = "SELECT f.*, m.password FROM files f LEFT JOIN folder_meta m ON f.folder = m.name WHERE f.type=? AND f.b2_path NOT LIKE '.sys/%' AND f.b2_path NOT LIKE '%__site_config__%' " + (iA ? '' : 'AND f.is_hidden=0'), prm = [bk];
           if (hasFolder) {
             if (!tF || !tF.trim()) {
               qry += " AND (f.folder = ? OR f.folder IS NULL OR TRIM(COALESCE(f.folder, '')) = '')";
@@ -870,9 +870,15 @@ export async function onRequest(context) {
             }
           }
           if (p.action === 'sync_d1_ghosts') {
+            await e.DB.prepare("DELETE FROM files WHERE b2_path LIKE '.sys/%' OR b2_path LIKE '%__site_config__%'").run();
             const sK = new Set(s3.map(o => o.key)), { results: R } = await e.DB.prepare("SELECT * FROM files WHERE type=?").bind(bk).all();
             let dc = 0;
             for (const f of R) {
+              if (f.b2_path && (f.b2_path.startsWith('.sys/') || f.b2_path.includes('__site_config__'))) {
+                await e.DB.prepare("DELETE FROM files WHERE id=?").bind(f.id).run();
+                dc++;
+                continue;
+              }
               if (!sK.has(f.b2_path)) {
                 await e.DB.prepare("DELETE FROM files WHERE id=?").bind(f.id).run();
                 dc++;
@@ -886,6 +892,7 @@ export async function onRequest(context) {
             const dK = new Set([...fR.results.map(r => r.b2_path), ...uR.results.map(r => r.b2_path)]);
             let dc = 0, nw = Date.now();
             for (const o of s3) {
+              if (o.key.startsWith('.sys/') || o.key.includes('__site_config__')) continue;
               if (!dK.has(o.key) && (nw - o.lastModified > 86400000)) {
                 await aw.fetch(CONFIG.S3_ENDPOINT + '/' + bk + '/' + encodeURIComponent(o.key), { method: 'DELETE' });
                 dc++;
@@ -894,10 +901,12 @@ export async function onRequest(context) {
             return Response.json({ ok: true, msg: '清理了 ' + dc + ' 个游离文件！' });
           }
           if (p.action === 'sync_b2_to_d1') {
+            await e.DB.prepare("DELETE FROM files WHERE b2_path LIKE '.sys/%' OR b2_path LIKE '%__site_config__%'").run();
             const fR = await e.DB.prepare("SELECT b2_path FROM files WHERE type=?").bind(bk).all();
             const dK = new Set([...fR.results.map(r => r.b2_path)]);
             let dc = 0, b = [];
             for (const o of s3) {
+              if (o.key.startsWith('.sys/') || o.key.includes('__site_config__')) continue;
               if (!dK.has(o.key)) {
                 const fn = o.key.split('_').slice(1).join('_') || o.key;
                 b.push(e.DB.prepare("INSERT INTO files (id,name,b2_path,type,size,folder) VALUES (?,?,?,?,?,?)").bind(crypto.randomUUID(), fn, o.key, bk, o.size, 'B2直传同步'));
@@ -907,6 +916,7 @@ export async function onRequest(context) {
             if (b.length > 0) {
               for (let i = 0; i < b.length; i += 50) await e.DB.batch(b.slice(i, i + 50));
             }
+            await e.DB.prepare("DELETE FROM files WHERE b2_path LIKE '.sys/%' OR b2_path LIKE '%__site_config__%'").run();
             return Response.json({ ok: true, msg: '成功将 ' + dc + ' 个 B2 游离文件同步归档至 [B2直传同步] 文件夹！' });
           }
         }

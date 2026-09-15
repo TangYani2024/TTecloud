@@ -1,4 +1,4 @@
-﻿Object.assign(app, {
+Object.assign(app, {
   async adminAct(a, i, p) {
     let rq = { action: a, id: i, viewMode: this.state.view };
     if (a === 'delete' && !confirm('永久删除？')) return;
@@ -74,9 +74,10 @@
       });
       const res = await r.json();
       if (res.url) {
-        const expHeader = this.settings.expect ? atob('LUggIkV4cGVjdSIsI') + '' : '';
-        this.copyText(atob('Y3VybCAtIyAtWCBQVVQgLUggIkNvbnRlbnQtVHlwZTogYXBwbGljYXRpb24vb2N0ZXQtc3RyZWFtIiA=') + expHeader + atob('LVQgIg==') + fn + '" "' + res.url + '"');
-        alert('✅ 已生成并复制专属 ' + atob('Q3VybA==') + ' 直传命令！在终端直接粘贴执行即可。');
+        const ua = (window.appConfig && window.appConfig.s3 && window.appConfig.s3.userAgent) || 'S3Drive';
+        const expHeader = this.settings.expect ? '-H "Expect: " ' : '';
+        this.copyText('curl -A "' + ua + '" -# -X PUT -H "Content-Type: application/octet-stream" ' + expHeader + '-T "' + fn + '" "' + res.url + '"');
+        alert('✅ 已生成并复制专属 Curl 直传命令（内置 ' + ua + ' 伪装头）！在终端直接粘贴执行即可。');
       }
     } catch (e) {
       alert('生成失败');
