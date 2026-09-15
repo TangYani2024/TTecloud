@@ -65,21 +65,32 @@ Object.assign(app, {
     }, 2000);
   },
 
-  formatS3Error(txt) {
-    if (!txt) return '对象存储未知异常';
-    const codeMatch = txt.match(/<Code>(.*?)<\/Code>/i);
-    const msgMatch = txt.match(/<Message>(.*?)<\/Message>/i);
-    if (codeMatch || msgMatch) {
-      const code = codeMatch ? codeMatch[1] : '';
-      const msg = msgMatch ? msgMatch[1] : '';
-      if (code === 'NoSuchBucket') return '存储桶不存在 (NoSuchBucket): 请检查 config.json 桶名';
-      if (code === 'InvalidAccessKeyId') return 'Key ID 错误 (InvalidAccessKeyId): 请检查环境变量';
-      if (code === 'SignatureDoesNotMatch') return '签名失败 (SignatureDoesNotMatch): 请检查 Secret Key';
-      if (code === 'AccessDenied') return '访问受限 (AccessDenied): 凭证无权限或 CORS 策略未配置';
-      if (code === 'EntityTooLarge') return '文件超出存储桶单次上传大小限制';
-      return `存储桶错误 [${code}]: ${msg || txt.slice(0, 100)}`;
+  formatS3Error(txt, status) {
+    if (!txt) return status ? `对象存储返回空响应 (HTTP ${status})` : '对象存储返回空响应';
+    try {
+      const parsed = typeof txt === 'object' ? txt : JSON.parse(txt);
+      if (parsed && parsed.error) return parsed.error;
+      if (parsed && parsed.message) return parsed.message;
+    } catch (_) {}
+
+    if (typeof txt === 'string') {
+      const codeMatch = txt.match(/<Code>(.*?)<\/Code>/i);
+      const msgMatch = txt.match(/<Message>(.*?)<\/Message>/i);
+      if (codeMatch || msgMatch) {
+        const code = codeMatch ? codeMatch[1] : '';
+        const msg = msgMatch ? msgMatch[1] : '';
+        if (code === 'NoSuchBucket') return '存储桶不存在 (NoSuchBucket): 请检查 config.json 桶名配置是否与存储桶一致';
+        if (code === 'InvalidAccessKeyId') return 'Key ID 错误 (InvalidAccessKeyId): 请检查环境变量 S3_ACCESS_KEY_ID 或 B2_KEY_ID';
+        if (code === 'SignatureDoesNotMatch') return '签名失败 (SignatureDoesNotMatch): 请检查 Secret Key 密钥配置';
+        if (code === 'AccessDenied') return '访问受限 (AccessDenied): 凭证无权限或 CORS 策略未放行';
+        if (code === 'EntityTooLarge') return '文件超出存储桶单次上传大小限制';
+        return `存储桶错误 [${code}]: ${msg || txt.slice(0, 300)}`;
+      }
+      const cleanTxt = txt.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+      const info = cleanTxt || txt;
+      return status ? `存储桶响应异常 (HTTP ${status}): ${info}` : `存储桶响应异常: ${info}`;
     }
-    return txt.length > 150 ? (txt.slice(0, 150) + '...') : txt;
+    return status ? `存储桶响应异常 (HTTP ${status}): ${String(txt)}` : String(txt);
   },
 
   async startUploadQueue() {
@@ -139,9 +150,9 @@ Object.assign(app, {
 
     if (!this.cancelFlag) {
       if (failed > 0) {
-        document.getElementById('uploadStatus').innerHTML = '<img class="om-emoji" src="/openmoji/26A0.svg" alt="⚠️"> 队列完成: ' + completed + ' 成功，<span style="color:#ef4444">' + failed + ' 失败</span>';
+        document.getElementById('uploadStatus').innerHTML = '<img class="om-emoji" src="/openmoji/26A0.svg" alt="⚠️"> 队列完成: ' + completed + ' 成功，<span style="color:#ef4444;cursor:pointer;text-decoration:underline;" title="点击查看完整错误信息" onclick="app.showUploadErrorModal(\'上传队列\',' + JSON.stringify(lastErrorMsg) + ')">' + failed + ' 失败 (点击查看详情)</span>';
         document.getElementById('uploadStatus').style.color = '#ef4444';
-        this.toast('⚠️ 上传遇到错误: ' + lastErrorMsg);
+        this.toast('⚠️ 上传遇到错误: ' + (lastErrorMsg.length > 50 ? lastErrorMsg.slice(0, 50) + '...' : lastErrorMsg));
       } else {
         document.getElementById('uploadStatus').innerHTML = '<img class="om-emoji" src="/openmoji/1F389.svg" alt="🎉"> 队列全部完成！';
       }
@@ -220,17 +231,19 @@ Object.assign(app, {
               updateEl('<img class="om-emoji" src="/openmoji/2705.svg" alt="✅"> 完成', 100, '#10b981');
               resolve();
             } else {
-              let errMsg = '上传失败 (' + xhr.status + ')';
+              let errMsg = '上传失败 (HTTP ' + xhr.status + ')';
               try {
                 const j = JSON.parse(xhr.responseText);
                 if (j && j.error) errMsg = j.error;
+                else if (j && j.message) errMsg = j.message;
               } catch(_) {
-                if (xhr.responseText) errMsg = this.formatS3Error(xhr.responseText);
+                if (xhr.responseText) errMsg = this.formatS3Error(xhr.responseText, xhr.status);
               }
               reject(new Error(errMsg));
             }
           };
-          xhr.onerror = () => reject(new Error('网络连接中断'));
+          xhr.onerror = () => reject(new Error('网络请求异常或跨域受阻 (Network Error / CORS Blocked)'));
+          xhr.ontimeout = () => reject(new Error('上传请求超时 (Request Timeout)'));
           xhr.onabort = () => reject(new DOMException('AbortError', 'AbortError'));
           xhr.send(f);
         });
@@ -244,9 +257,9 @@ Object.assign(app, {
           signal: ctrl.signal
         }, 15000);
         if (!ckRes.ok) {
-          let msg = '检查断点续传失败';
-          try { const j = await ckRes.json(); if (j.error) msg = j.error; } catch(_) {}
-          throw new Error(msg);
+          let msg = '检查断点续传失败 (HTTP ' + ckRes.status + ')';
+          try { const j = await ckRes.json(); if (j.error) msg = j.error; } catch(_) { msg = await ckRes.text(); }
+          throw new Error(this.formatS3Error(msg, ckRes.status));
         }
         const ck = await ckRes.json();
 
@@ -270,9 +283,9 @@ Object.assign(app, {
             signal: ctrl.signal
           }, 15000);
           if (!stRes.ok) {
-            let msg = '初始化分片任务失败';
+            let msg = '初始化分片任务失败 (HTTP ' + stRes.status + ')';
             try { const j = await stRes.json(); if (j.error) msg = j.error; } catch(_) { msg = await stRes.text(); }
-            throw new Error(this.formatS3Error(msg));
+            throw new Error(this.formatS3Error(msg, stRes.status));
           }
           const st = await stRes.json();
           ui = st.fileId;
@@ -296,9 +309,9 @@ Object.assign(app, {
             signal: ctrl.signal
           }, 30000);
           if (!bpr.ok) {
-            let msg = '获取分片签名失败';
+            let msg = '获取分片签名失败 (HTTP ' + bpr.status + ')';
             try { const j = await bpr.json(); if (j.error) msg = j.error; } catch(_) { msg = await bpr.text(); }
-            throw new Error(this.formatS3Error(msg));
+            throw new Error(this.formatS3Error(msg, bpr.status));
           }
           pUrls = await bpr.json();
         }
@@ -355,11 +368,13 @@ Object.assign(app, {
                     signal: ctrl.signal
                   }, 60000);
                   if (!r.ok) {
-                    let msg = '分片上传失败';
+                    let msg = '分片上传中继失败 (HTTP ' + r.status + ')';
                     try { const j = await r.json(); if (j.error) msg = j.error; } catch(_) { msg = await r.text(); }
-                    throw new Error(this.formatS3Error(msg));
+                    throw new Error(this.formatS3Error(msg, r.status));
                   }
-                  et = (await r.json()).etag;
+                  const pJson = await r.json();
+                  if (!pJson || !pJson.etag) throw new Error('分片上传中继未返回 ETag');
+                  et = pJson.etag;
                 } else {
                   const prUrl = pUrls[pn];
                   if (!prUrl) throw new Error('签名通道不存在');
@@ -372,11 +387,15 @@ Object.assign(app, {
                     signal: ctrl.signal
                   }, 60000);
                   if (!r.ok) {
-                    let msg = 'S3直传失败 (' + r.status + ')';
+                    let msg = 'S3直传失败 (HTTP ' + r.status + ')';
                     try { msg = await r.text(); } catch(_) {}
-                    throw new Error(this.formatS3Error(msg));
+                    throw new Error(this.formatS3Error(msg, r.status));
                   }
-                  et = r.headers.get('ETag').replace(/"/g, '');
+                  const etagHeader = r.headers.get('ETag');
+                  if (!etagHeader) {
+                    throw new Error('存储桶直传未返回 ETag 响应头！请在存储桶 CORS 规则中添加 Expose Headers: ETag (或允许暴露所有头)');
+                  }
+                  et = etagHeader.replace(/"/g, '');
                   safeSyncPart(pn, et);
                 }
 
@@ -387,8 +406,12 @@ Object.assign(app, {
               } catch (e) {
                 if (this.cancelFlag) break;
                 pa[pn]++;
+                let customErr = e;
+                if (e && e.message === 'Failed to fetch') {
+                  customErr = new Error('网络请求失败 (Failed to fetch): 可能是存储桶未配置 CORS 允许 PUT/OPTIONS 跨域，或网络连接中断');
+                }
                 if (pa[pn] >= 6) {
-                  ue = e || new Error('分片上传多次重试失败');
+                  ue = customErr || new Error('分片上传多次重试失败');
                   break;
                 }
                 ct = ct === 'CF_PROXY' ? 'B2_DIRECT' : 'CF_PROXY';
@@ -428,9 +451,9 @@ Object.assign(app, {
           signal: ctrl.signal
         }, 30000);
         if (!fr.ok) {
-          let msg = '合并分片失败';
+          let msg = '合并分片失败 (HTTP ' + fr.status + ')';
           try { const j = await fr.json(); if (j.error) msg = j.error; } catch(_) { msg = await fr.text(); }
-          throw new Error(this.formatS3Error(msg));
+          throw new Error(this.formatS3Error(msg, fr.status));
         }
         updateEl('<img class="om-emoji" src="/openmoji/2705.svg" alt="✅"> 完成', 100, '#10b981');
         return { ok: true };
@@ -440,11 +463,11 @@ Object.assign(app, {
         updateEl('<img class="om-emoji" src="/openmoji/274C.svg" alt="❌"> 已取消', 0, '#ef4444');
         return { error: '已取消' };
       } else {
-        const errorMsg = err.message || '上传失败';
-        const displayMsg = errorMsg.length > 20 ? (errorMsg.slice(0, 20) + '...') : errorMsg;
+        const errorMsg = err.message || String(err) || '未知异常';
+        const displayMsg = errorMsg.length > 25 ? (errorMsg.slice(0, 25) + '...') : errorMsg;
         updateEl(
-          '<span style="color:#ef4444;cursor:pointer;display:inline-flex;align-items:center;gap:4px;" title="' + this.escapeHTML(errorMsg) + '" onclick="alert(\'上传失败详情：\\n\' + ' + JSON.stringify(errorMsg) + ')">' +
-          '<img class="om-emoji" src="/openmoji/274C.svg" alt="❌"> <span>' + this.escapeHTML(displayMsg) + '</span></span>',
+          '<span style="color:#ef4444;cursor:pointer;display:inline-flex;align-items:center;gap:4px;max-width:100%;" title="点击查看完整错误信息" onclick="app.showUploadErrorModal(' + JSON.stringify(f.name) + ',' + JSON.stringify(errorMsg) + ')">' +
+          '<img class="om-emoji" src="/openmoji/274C.svg" alt="❌"> <span style="text-decoration:underline;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + this.escapeHTML(displayMsg) + '</span></span>',
           0,
           '#ef4444'
         );
@@ -453,6 +476,49 @@ Object.assign(app, {
     } finally {
       delete this.activeControllers[task.id];
     }
+  },
+
+  showUploadErrorModal(fileName, errStr) {
+    history.pushState({ mdl: 'modal-upload-error' }, '');
+    const m = document.createElement('div');
+    m.className = 'modal-overlay';
+    m.id = 'modal-upload-error';
+    m.style.opacity = '0';
+    m.innerHTML = '<div class="modal-content" style="opacity:0;transform:scale(0.95) translateY(15px);max-width:540px;width:92%;">' +
+                  '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
+                  '<h3 style="margin:0;display:flex;align-items:center;gap:6px;color:#ef4444;font-size:16px;"><img class="om-emoji" src="/openmoji/26A0.svg" alt="⚠️"> 上传失败详情</h3>' +
+                  '<button type="button" class="btn-modal-close-red" onclick="app.closeModal(\'modal-upload-error\')" title="关闭">' +
+                  '<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2.5" fill="none"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>' +
+                  '</button>' +
+                  '</div>' +
+                  '<div style="font-size:13px;font-weight:600;margin-bottom:8px;word-break:break-all;color:var(--text);">' +
+                  '目标对象: <span style="font-weight:normal;opacity:0.85;">' + this.escapeHTML(fileName || '未知') + '</span>' +
+                  '</div>' +
+                  '<div style="font-size:12px;margin-bottom:6px;color:var(--text);opacity:0.75;">详细错误响应 / 堆栈信息：</div>' +
+                  '<pre style="background:rgba(0,0,0,0.06);padding:12px;border-radius:8px;font-size:12px;white-space:pre-wrap;word-break:break-all;max-height:260px;overflow-y:auto;border:1px solid var(--cd);user-select:all;color:#dc2626;font-family:monospace;margin:0 0 16px 0;">' +
+                  this.escapeHTML(errStr || '未知异常') +
+                  '</pre>' +
+                  '<div style="display:flex;gap:10px;">' +
+                  '<button class="btn btn-primary" style="flex:1;padding:10px;border-radius:10px;" onclick="navigator.clipboard.writeText(' + JSON.stringify(errStr) + ').then(() => app.toast(\'已复制错误信息到剪贴板\')).catch(() => app.toast(\'复制失败\'))"><img class="om-emoji" src="/openmoji/1F4CB.svg" alt="📋"> 复制错误信息</button>' +
+                  '<button class="btn btn-outline" style="flex:1;padding:10px;border-radius:10px;" onclick="app.closeModal(\'modal-upload-error\')"><img class="om-emoji" src="/openmoji/274C.svg" alt="❌"> 关闭</button>' +
+                  '</div>' +
+                  '</div>';
+    document.body.appendChild(m);
+    document.body.classList.add('modal-open');
+    document.documentElement.classList.add('modal-open');
+
+    const mc = m.querySelector('.modal-content');
+    m.style.willChange = 'opacity';
+    mc.style.willChange = 'transform, opacity';
+    m.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 320, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', fill: 'forwards' });
+    const a2 = mc.animate(
+      [{ transform: 'scale(0.92) translateY(18px)', opacity: 0 }, { transform: 'scale(1) translateY(0)', opacity: 1 }],
+      { duration: 380, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', fill: 'forwards' }
+    );
+    a2.onfinish = () => {
+      mc.style.willChange = '';
+      m.style.willChange = '';
+    };
   },
 
   showSessionsModal() {

@@ -143,21 +143,32 @@ async function initD1Schema(db) {
   await db.batch(stmts.map(s => db.prepare(s)));
 }
 
-function formatS3Error(txt) {
-  if (!txt) return '对象存储未知错误';
-  const codeMatch = txt.match(/<Code>(.*?)<\/Code>/i);
-  const msgMatch = txt.match(/<Message>(.*?)<\/Message>/i);
-  if (codeMatch || msgMatch) {
-    const code = codeMatch ? codeMatch[1] : '';
-    const msg = msgMatch ? msgMatch[1] : '';
-    if (code === 'NoSuchBucket') return '存储桶不存在 (NoSuchBucket): 请检查 config.json 中的桶名称是否与实际创建的桶一致';
-    if (code === 'InvalidAccessKeyId') return '存储桶 Key ID 错误 (InvalidAccessKeyId): 请检查 Pages 环境变量中的 S3_ACCESS_KEY_ID 或 B2_KEY_ID';
-    if (code === 'SignatureDoesNotMatch') return '存储桶签名失败 (SignatureDoesNotMatch): 请检查 Pages 环境变量中的 Secret Key 是否正确';
-    if (code === 'AccessDenied') return '存储桶访问受限 (AccessDenied): 凭证无读写权限或存储桶权限策略限制';
-    if (code === 'EntityTooLarge') return '文件超出对象存储单次直传大小限制';
-    return `存储桶异常 [${code}]: ${msg || txt.slice(0, 120)}`;
+function formatS3Error(txt, status) {
+  if (!txt) return status ? `对象存储返回空响应 (HTTP ${status})` : '对象存储返回空响应';
+  try {
+    const parsed = typeof txt === 'object' ? txt : JSON.parse(txt);
+    if (parsed && parsed.error) return parsed.error;
+    if (parsed && parsed.message) return parsed.message;
+  } catch (_) {}
+
+  if (typeof txt === 'string') {
+    const codeMatch = txt.match(/<Code>(.*?)<\/Code>/i);
+    const msgMatch = txt.match(/<Message>(.*?)<\/Message>/i);
+    if (codeMatch || msgMatch) {
+      const code = codeMatch ? codeMatch[1] : '';
+      const msg = msgMatch ? msgMatch[1] : '';
+      if (code === 'NoSuchBucket') return '存储桶不存在 (NoSuchBucket): 请检查 config.json 中的桶名称是否与实际创建的桶一致';
+      if (code === 'InvalidAccessKeyId') return '存储桶 Key ID 错误 (InvalidAccessKeyId): 请检查 Pages 环境变量中的 S3_ACCESS_KEY_ID 或 B2_KEY_ID';
+      if (code === 'SignatureDoesNotMatch') return '存储桶签名失败 (SignatureDoesNotMatch): 请检查 Pages 环境变量中的 Secret Key 是否正确';
+      if (code === 'AccessDenied') return '存储桶访问受限 (AccessDenied): 凭证无读写权限或存储桶权限策略限制';
+      if (code === 'EntityTooLarge') return '文件超出对象存储单次直传大小限制';
+      return `存储桶异常 [${code}]: ${msg || txt.slice(0, 300)}`;
+    }
+    const cleanTxt = txt.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    const info = cleanTxt || txt;
+    return status ? `存储桶响应异常 (HTTP ${status}): ${info}` : `存储桶响应异常: ${info}`;
   }
-  return txt.length > 200 ? (txt.slice(0, 200) + '...') : txt;
+  return status ? `存储桶响应异常 (HTTP ${status}): ${String(txt)}` : String(txt);
 }
 
 async function awsS3Fetch(u, o, e) {
@@ -934,7 +945,7 @@ export async function onRequest(context) {
           headers: { 'Content-Type': req.headers.get('content-type') || 'application/octet-stream', 'x-amz-content-sha256': 'UNSIGNED-PAYLOAD' },
           body: req.body
         }, e);
-        if (!rs.ok) throw new Error(formatS3Error(await rs.text()));
+        if (!rs.ok) throw new Error(formatS3Error(await rs.text(), rs.status));
         await e.DB.prepare("INSERT INTO files (id,name,b2_path,type,size,folder) VALUES (?,?,?,?,?,?)").bind(crypto.randomUUID(), fn, bp, bk, req.headers.get('content-length') || 0, decodeURIComponent(req.headers.get('x-folder'))).run();
         globalLastSizeCalcTime = 0;
         return Response.json({ ok: true });
@@ -946,8 +957,11 @@ export async function onRequest(context) {
         const bp = Date.now() + '_' + d.filename, tp = d.type || 'resource', bk = (tp === 'image' && HAS_IMAGE) ? CONFIG.BUCKETS.IMAGE : CONFIG.BUCKETS.RESOURCE;
         if (!bk) throw new Error('未配置当前模式对应的存储桶名称');
         const rs = await awsS3Fetch(CONFIG.S3_ENDPOINT + '/' + bk + '/' + encodeURIComponent(bp) + '?uploads', { method: 'POST', headers: { 'Content-Type': d.contentType } }, e);
-        if (!rs.ok) throw new Error(formatS3Error(await rs.text()));
-        const ui = (await rs.text()).match(/<UploadId>(.*?)<\/UploadId>/)[1];
+        const resTxt = await rs.text();
+        if (!rs.ok) throw new Error(formatS3Error(resTxt, rs.status));
+        const uiMatch = resTxt.match(/<UploadId>(.*?)<\/UploadId>/i);
+        if (!uiMatch) throw new Error('未能从存储桶响应中解析 UploadId: ' + formatS3Error(resTxt, rs.status));
+        const ui = uiMatch[1];
         await e.DB.prepare("INSERT OR REPLACE INTO upload_sessions (file_hash,b2_file_id,b2_path,bucket,folder,uploaded_parts) VALUES (?,?,?,?,?,'[]')").bind(d.fileHash, ui, bp, bk, d.folder).run();
         return Response.json({ fileId: ui, b2Path: bp });
       }
@@ -971,8 +985,9 @@ export async function onRequest(context) {
         if (req.headers.get('content-length')) h['Content-Length'] = req.headers.get('content-length');
         const tp = req.headers.get('x-type') || 'resource', bk = (tp === 'image' && HAS_IMAGE) ? CONFIG.BUCKETS.IMAGE : CONFIG.BUCKETS.RESOURCE;
         const rs = await awsS3Fetch(CONFIG.S3_ENDPOINT + '/' + bk + '/' + encodeURIComponent(decodeURIComponent(req.headers.get('x-b2-path'))) + '?partNumber=' + req.headers.get('x-part-number') + '&uploadId=' + req.headers.get('x-file-id'), { method: 'PUT', headers: h, body: req.body }, e);
-        if (!rs.ok) throw new Error(formatS3Error(await rs.text()));
-        const fh = req.headers.get('x-file-hash'), et = rs.headers.get('ETag').replace(/"/g, ''), pn = parseInt(req.headers.get('x-part-number'));
+        if (!rs.ok) throw new Error(formatS3Error(await rs.text(), rs.status));
+        const fh = req.headers.get('x-file-hash'), rawEt = rs.headers.get('ETag') || '', et = rawEt.replace(/"/g, ''), pn = parseInt(req.headers.get('x-part-number'));
+        if (!et) throw new Error('存储桶分片上传中继未返回 ETag');
         if (fh) await e.DB.prepare("UPDATE upload_sessions SET uploaded_parts=(SELECT json_group_array(json_object('partNumber',CAST(partNumber AS INTEGER),'etag',etag)) FROM (SELECT json_extract(value,'$.partNumber') as partNumber,json_extract(value,'$.etag') as etag FROM json_each(uploaded_parts) WHERE partNumber!=? UNION ALL SELECT ? as partNumber,? as etag)) WHERE file_hash=?").bind(pn, pn, et, fh).run();
         return Response.json({ etag: et });
       }
@@ -982,7 +997,7 @@ export async function onRequest(context) {
         const xml = '<CompleteMultipartUpload>' + d.etagArray.map((t, i) => '<Part><PartNumber>' + (i + 1) + '</PartNumber><ETag>' + t + '</ETag></Part>').join('') + '</CompleteMultipartUpload>';
         const tp = d.type || 'resource', bk = (tp === 'image' && HAS_IMAGE) ? CONFIG.BUCKETS.IMAGE : CONFIG.BUCKETS.RESOURCE;
         const rs = await awsS3Fetch(CONFIG.S3_ENDPOINT + '/' + bk + '/' + encodeURIComponent(d.b2_path) + '?uploadId=' + d.fileId, { method: 'POST', body: xml }, e);
-        if (!rs.ok) throw new Error(formatS3Error(await rs.text()));
+        if (!rs.ok) throw new Error(formatS3Error(await rs.text(), rs.status));
         await e.DB.prepare("INSERT INTO files (id,name,b2_path,type,size,folder) VALUES (?,?,?,?,?,?)").bind(crypto.randomUUID(), d.name, d.b2_path, bk, d.size, d.folder).run();
         if (d.fileHash) await e.DB.prepare("DELETE FROM upload_sessions WHERE file_hash=?").bind(d.fileHash).run();
         globalLastSizeCalcTime = 0;
