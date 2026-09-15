@@ -307,6 +307,13 @@ export async function onRequest(context) {
     return res;
   }
 
+  // 1.1 静态配置接口（方便客户端直接获取站点标题与基础配置）
+  if (P === '/config.json') {
+    return Response.json(appConfig || {}, {
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=60' }
+    });
+  }
+
   // 2. 登录认证接口
   if (P === '/login') {
     if (req.method === 'GET') {
@@ -635,11 +642,12 @@ export async function onRequest(context) {
           return Response.json({
             isAdmin: iA,
             hasImage: HAS_IMAGE,
+            siteTitle: CONFIG.SITE_TITLE,
             totalSize: 0,
             maxSize: CONFIG.MAX_STORAGE_BYTES,
             mode: hasFolder ? 'files' : 'folders',
             data: [],
-            error: '请在 Cloudflare Pages 中绑定 D1 数据库 (变量名: DB)'
+            error: '未连接到 D1 数据库！若已在 Pages 设置中绑定了 DB，请进入 Pages 项目的【部署 (Deployments)】页面，点击最新部署右侧的【重试部署 (Retry deployment)】以激活绑定。'
           }, { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
         }
         try {
@@ -652,6 +660,7 @@ export async function onRequest(context) {
             return Response.json({
               isAdmin: iA,
               hasImage: HAS_IMAGE,
+              siteTitle: CONFIG.SITE_TITLE,
               totalSize: globalCachedTotalSize,
               maxSize: CONFIG.MAX_STORAGE_BYTES,
               mode: 'folders',
@@ -687,6 +696,7 @@ export async function onRequest(context) {
           return Response.json({
             isAdmin: iA,
             hasImage: HAS_IMAGE,
+            siteTitle: CONFIG.SITE_TITLE,
             totalSize: globalCachedTotalSize,
             maxSize: CONFIG.MAX_STORAGE_BYTES,
             mode: 'files',
@@ -694,14 +704,19 @@ export async function onRequest(context) {
             folderMeta: (R && R.length) ? !!R[0].password : false
           }, { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
         } catch (dbErr) {
+          const isTableMissing = dbErr.message && dbErr.message.toLowerCase().includes('no such table');
+          const errMsg = isTableMissing
+            ? 'D1 数据库未初始化数据表！检测到数据库中缺少核心表。请进入 Cloudflare 后台 -> D1 SQL 数据库 -> 控制台 (Console)，复制仓库中 schema.sql 全部内容并粘贴执行。'
+            : ('数据库异常: ' + dbErr.message);
           return Response.json({
             isAdmin: iA,
             hasImage: HAS_IMAGE,
+            siteTitle: CONFIG.SITE_TITLE,
             totalSize: 0,
             maxSize: CONFIG.MAX_STORAGE_BYTES,
             mode: hasFolder ? 'files' : 'folders',
             data: [],
-            error: '数据库查询异常: ' + dbErr.message
+            error: errMsg
           }, { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
         }
       }

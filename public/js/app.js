@@ -128,11 +128,19 @@ const app = {
 
 
   async init() {
+    const applyTitle = (t) => {
+      if (!t) return;
+      document.title = t;
+      const titleEl = document.querySelector('.header-title span');
+      if (titleEl) titleEl.innerText = t;
+    };
     const siteTitle = (window.__CFG__ && window.__CFG__.siteTitle);
     if (siteTitle) {
-      document.title = siteTitle;
-      const titleEl = document.querySelector('.header-title span');
-      if (titleEl) titleEl.innerText = siteTitle;
+      applyTitle(siteTitle);
+    } else {
+      fetch('/config.json').then(r => r.json()).then(cfg => {
+        if (cfg && cfg.site && cfg.site.title) applyTitle(cfg.site.title);
+      }).catch(() => {});
     }
     document.querySelectorAll('.d-b64').forEach(e => e.innerText = atob(e.dataset.b));
     this.refreshSettingsUI();
@@ -411,6 +419,12 @@ const app = {
         throw new Error(rs.error || ('网络/接口异常 (' + r.status + ')'));
       }
 
+      if (rs.siteTitle) {
+        document.title = rs.siteTitle;
+        const titleEl = document.querySelector('.header-title span');
+        if (titleEl) titleEl.innerText = rs.siteTitle;
+      }
+
       this.state.isAdmin = !!rs.isAdmin;
       if (rs.hasImage !== undefined) {
         this.state.hasImage = !!rs.hasImage;
@@ -462,7 +476,17 @@ const app = {
       }
 
       if (rs.error) {
-        a.innerHTML = '<div style="text-align:center;padding:50px 20px;color:#ef4444;"><div style="font-size:32px;margin-bottom:12px;">⚠️</div><div style="font-weight:bold;font-size:15px;margin-bottom:8px;">' + this.escapeHTML(rs.error) + '</div><div style="font-size:13px;color:gray;">若首次部署，请确保在 Cloudflare Pages 后台绑定 D1 数据库 (变量名 DB)。</div></div>';
+        a.innerHTML = '<div style="max-width:580px;margin:35px auto;padding:24px;background:rgba(239,68,68,0.05);border:1px solid rgba(239,68,68,0.25);border-radius:16px;text-align:center;">' +
+          '<div style="font-size:36px;margin-bottom:10px;">⚠️</div>' +
+          '<h3 style="margin:0 0 10px;color:#ef4444;font-size:16px;">数据库未就绪</h3>' +
+          '<div style="font-size:13px;color:var(--tx);line-height:1.6;margin-bottom:16px;font-weight:bold;">' + this.escapeHTML(rs.error) + '</div>' +
+          '<div style="font-size:12px;color:gray;text-align:left;background:rgba(0,0,0,0.03);padding:14px 18px;border-radius:12px;line-height:1.7;">' +
+          '<b>🛠️ 请按以下步骤完成初始化：</b><br>' +
+          '1. <b>执行建表 SQL</b>：在 Cloudflare 控制台 -&gt; <b>D1 SQL 数据库</b> -&gt; 选择您的数据库 -&gt; 点击 <b>控制台 (Console)</b>，将项目中的 <code>schema.sql</code> 全部内容粘贴进去执行；<br>' +
+          '2. <b>绑定 D1 变量</b>：在 Pages 项目 -&gt; <b>设置</b> -&gt; <b>函数</b> -&gt; <b>D1 数据库绑定</b>，变量名称填写 <code>DB</code>；<br>' +
+          '3. <b>重新部署生效</b>：前往 Pages 项目的<b>【部署 (Deployments)】</b>页面，点击最新记录右侧的 <code>...</code> -&gt; <b>【重试部署 (Retry deployment)】</b>。' +
+          '</div>' +
+          '</div>';
         return;
       }
       
@@ -480,7 +504,12 @@ const app = {
       }
       const a = document.getElementById('dynamic-area');
       if (a) {
-        a.innerHTML = '<div style="text-align:center;padding:60px 20px;color:#ef4444;"><div style="font-size:28px;margin-bottom:10px;">⚠️</div><div style="font-weight:bold;margin-bottom:6px;">加载失败，请刷新重试</div><div style="font-size:12px;color:gray;">' + this.escapeHTML(e.message || e) + '</div></div>';
+        a.innerHTML = '<div style="max-width:580px;margin:35px auto;padding:24px;background:rgba(239,68,68,0.05);border:1px solid rgba(239,68,68,0.25);border-radius:16px;text-align:center;">' +
+          '<div style="font-size:36px;margin-bottom:10px;">⚠️</div>' +
+          '<h3 style="margin:0 0 10px;color:#ef4444;font-size:16px;">数据加载异常</h3>' +
+          '<div style="font-size:13px;color:var(--tx);margin-bottom:12px;">' + this.escapeHTML(e.message || e) + '</div>' +
+          '<div style="font-size:12px;color:gray;">如已绑定 D1 或更新代码，请尝试按 <b>Ctrl+F5</b> 强制刷新浏览器缓存，并确认 Pages 已重试部署。</div>' +
+          '</div>';
       }
     }
   },
