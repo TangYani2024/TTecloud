@@ -65,12 +65,29 @@ Object.assign(app, {
     }, 2000);
   },
 
+  formatS3Error(txt) {
+    if (!txt) return '对象存储未知异常';
+    const codeMatch = txt.match(/<Code>(.*?)<\/Code>/i);
+    const msgMatch = txt.match(/<Message>(.*?)<\/Message>/i);
+    if (codeMatch || msgMatch) {
+      const code = codeMatch ? codeMatch[1] : '';
+      const msg = msgMatch ? msgMatch[1] : '';
+      if (code === 'NoSuchBucket') return '存储桶不存在 (NoSuchBucket): 请检查 config.json 桶名';
+      if (code === 'InvalidAccessKeyId') return 'Key ID 错误 (InvalidAccessKeyId): 请检查环境变量';
+      if (code === 'SignatureDoesNotMatch') return '签名失败 (SignatureDoesNotMatch): 请检查 Secret Key';
+      if (code === 'AccessDenied') return '访问受限 (AccessDenied): 凭证无权限或 CORS 策略未配置';
+      if (code === 'EntityTooLarge') return '文件超出存储桶单次上传大小限制';
+      return `存储桶错误 [${code}]: ${msg || txt.slice(0, 100)}`;
+    }
+    return txt.length > 150 ? (txt.slice(0, 150) + '...') : txt;
+  },
+
   async startUploadQueue() {
     if (this.isUploading || this.uploadQueue.length === 0) return;
     this.closeModal('modal-upload');
     this.isUploading = true;
     this.cancelFlag = false;
-    let total = this.uploadQueue.length, completed = 0;
+    let total = this.uploadQueue.length, completed = 0, failed = 0, lastErrorMsg = '';
     const upBtn = document.getElementById('uploadBtn');
     if (upBtn) {
       upBtn.disabled = true;
@@ -83,8 +100,8 @@ Object.assign(app, {
     document.getElementById('uploadStatus').style.color = 'var(--primary)';
 
     const updateOverall = () => {
-      document.getElementById('uploadPercent').innerText = completed + ' / ' + total;
-      document.getElementById('uploadProgressBar').style.width = ((completed / total) * 100) + '%';
+      document.getElementById('uploadPercent').innerText = (completed + failed) + ' / ' + total + (failed > 0 ? (' (' + failed + ' 失败)') : '');
+      document.getElementById('uploadProgressBar').style.width = (((completed + failed) / total) * 100) + '%';
     };
     updateOverall();
 
@@ -106,8 +123,13 @@ Object.assign(app, {
     const runner = async () => {
       while (this.uploadQueue.length > 0 && !this.cancelFlag) {
         let task = this.uploadQueue.shift();
-        await this.uploadSingleTask(task);
-        completed++;
+        const res = await this.uploadSingleTask(task);
+        if (res && res.error && res.error !== '已取消') {
+          failed++;
+          lastErrorMsg = res.error;
+        } else if (!res || !res.error) {
+          completed++;
+        }
         updateOverall();
       }
     };
@@ -116,7 +138,13 @@ Object.assign(app, {
     await Promise.all(activePromises);
 
     if (!this.cancelFlag) {
-      document.getElementById('uploadStatus').innerHTML = '<img class="om-emoji" src="/openmoji/1F389.svg" alt="🎉"> 队列全部完成！';
+      if (failed > 0) {
+        document.getElementById('uploadStatus').innerHTML = '<img class="om-emoji" src="/openmoji/26A0.svg" alt="⚠️"> 队列完成: ' + completed + ' 成功，<span style="color:#ef4444">' + failed + ' 失败</span>';
+        document.getElementById('uploadStatus').style.color = '#ef4444';
+        this.toast('⚠️ 上传遇到错误: ' + lastErrorMsg);
+      } else {
+        document.getElementById('uploadStatus').innerHTML = '<img class="om-emoji" src="/openmoji/1F389.svg" alt="🎉"> 队列全部完成！';
+      }
       setTimeout(() => {
         const upProgress = document.getElementById('uploadProgress');
         if (upProgress) upProgress.style.display = 'none';
@@ -129,7 +157,7 @@ Object.assign(app, {
         document.getElementById('file-name-display').innerHTML = '<img class="om-emoji" src="/openmoji/2795.svg" alt="➕"> 点击选择多文件，或直接拖拽文件夹到此处';
         document.getElementById('queue-info').innerText = '完美支持多文件、多级文件夹拖拽识别并发';
         this.fetchData();
-      }, 2000);
+      }, failed > 0 ? 5000 : 2000);
     }
     this.isUploading = false;
   },
@@ -192,21 +220,35 @@ Object.assign(app, {
               updateEl('<img class="om-emoji" src="/openmoji/2705.svg" alt="✅"> 完成', 100, '#10b981');
               resolve();
             } else {
-              reject(new Error('失败'));
+              let errMsg = '上传失败 (' + xhr.status + ')';
+              try {
+                const j = JSON.parse(xhr.responseText);
+                if (j && j.error) errMsg = j.error;
+              } catch(_) {
+                if (xhr.responseText) errMsg = this.formatS3Error(xhr.responseText);
+              }
+              reject(new Error(errMsg));
             }
           };
-          xhr.onerror = () => reject(new Error('网络中断'));
+          xhr.onerror = () => reject(new Error('网络连接中断'));
           xhr.onabort = () => reject(new DOMException('AbortError', 'AbortError'));
           xhr.send(f);
         });
+        return { ok: true };
       } else {
         updateEl('探测分片...', 0);
-        const ck = await (await this.fetchWithTimeout('/api/upload/check', {
+        const ckRes = await this.fetchWithTimeout('/api/upload/check', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ fileHash: fHash }),
           signal: ctrl.signal
-        }, 15000)).json();
+        }, 15000);
+        if (!ckRes.ok) {
+          let msg = '检查断点续传失败';
+          try { const j = await ckRes.json(); if (j.error) msg = j.error; } catch(_) {}
+          throw new Error(msg);
+        }
+        const ck = await ckRes.json();
 
         let ui, bp, up = [];
         if (ck.exists) {
@@ -215,7 +257,7 @@ Object.assign(app, {
           up = JSON.parse(ck.session.uploaded_parts || '[]');
           updateEl('续传中...', 0);
         } else {
-          const st = await (await this.fetchWithTimeout('/api/upload/start', {
+          const stRes = await this.fetchWithTimeout('/api/upload/start', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -226,7 +268,13 @@ Object.assign(app, {
               folder: finalFolder
             }),
             signal: ctrl.signal
-          }, 15000)).json();
+          }, 15000);
+          if (!stRes.ok) {
+            let msg = '初始化分片任务失败';
+            try { const j = await stRes.json(); if (j.error) msg = j.error; } catch(_) { msg = await stRes.text(); }
+            throw new Error(this.formatS3Error(msg));
+          }
+          const st = await stRes.json();
           ui = st.fileId;
           bp = st.b2Path;
         }
@@ -247,7 +295,11 @@ Object.assign(app, {
             body: JSON.stringify({ type: tp, uploadId: ui, b2Path: bp, parts: tpList }),
             signal: ctrl.signal
           }, 30000);
-          if (!bpr.ok) throw new Error('签名失败');
+          if (!bpr.ok) {
+            let msg = '获取分片签名失败';
+            try { const j = await bpr.json(); if (j.error) msg = j.error; } catch(_) { msg = await bpr.text(); }
+            throw new Error(this.formatS3Error(msg));
+          }
           pUrls = await bpr.json();
         }
 
@@ -302,11 +354,15 @@ Object.assign(app, {
                     body: c,
                     signal: ctrl.signal
                   }, 60000);
-                  if (!r.ok) throw new Error(await r.text());
+                  if (!r.ok) {
+                    let msg = '分片上传失败';
+                    try { const j = await r.json(); if (j.error) msg = j.error; } catch(_) { msg = await r.text(); }
+                    throw new Error(this.formatS3Error(msg));
+                  }
                   et = (await r.json()).etag;
                 } else {
                   const prUrl = pUrls[pn];
-                  if (!prUrl) throw new Error('P');
+                  if (!prUrl) throw new Error('签名通道不存在');
                   const hdrs = { 'Content-Type': 'application/octet-stream' };
                   if (sha256B64) hdrs['x-amz-checksum-sha256'] = sha256B64;
                   const r = await this.fetchWithTimeout(prUrl, {
@@ -315,7 +371,11 @@ Object.assign(app, {
                     body: c,
                     signal: ctrl.signal
                   }, 60000);
-                  if (!r.ok) throw new Error('D');
+                  if (!r.ok) {
+                    let msg = 'S3直传失败 (' + r.status + ')';
+                    try { msg = await r.text(); } catch(_) {}
+                    throw new Error(this.formatS3Error(msg));
+                  }
                   et = r.headers.get('ETag').replace(/"/g, '');
                   safeSyncPart(pn, et);
                 }
@@ -328,7 +388,7 @@ Object.assign(app, {
                 if (this.cancelFlag) break;
                 pa[pn]++;
                 if (pa[pn] >= 6) {
-                  ue = new Error('阻断');
+                  ue = e || new Error('分片上传多次重试失败');
                   break;
                 }
                 ct = ct === 'CF_PROXY' ? 'B2_DIRECT' : 'CF_PROXY';
@@ -367,12 +427,29 @@ Object.assign(app, {
           }),
           signal: ctrl.signal
         }, 30000);
-        if (!fr.ok) throw new Error('合并失败');
+        if (!fr.ok) {
+          let msg = '合并分片失败';
+          try { const j = await fr.json(); if (j.error) msg = j.error; } catch(_) { msg = await fr.text(); }
+          throw new Error(this.formatS3Error(msg));
+        }
         updateEl('<img class="om-emoji" src="/openmoji/2705.svg" alt="✅"> 完成', 100, '#10b981');
+        return { ok: true };
       }
     } catch (err) {
-      if (err.name === 'AbortError' || this.cancelFlag) updateEl('<img class="om-emoji" src="/openmoji/274C.svg" alt="❌"> 已取消', 0, '#ef4444');
-      else updateEl('<img class="om-emoji" src="/openmoji/274C.svg" alt="❌"> 失败', 0, '#ef4444');
+      if (err.name === 'AbortError' || this.cancelFlag) {
+        updateEl('<img class="om-emoji" src="/openmoji/274C.svg" alt="❌"> 已取消', 0, '#ef4444');
+        return { error: '已取消' };
+      } else {
+        const errorMsg = err.message || '上传失败';
+        const displayMsg = errorMsg.length > 20 ? (errorMsg.slice(0, 20) + '...') : errorMsg;
+        updateEl(
+          '<span style="color:#ef4444;cursor:pointer;display:inline-flex;align-items:center;gap:4px;" title="' + this.escapeHTML(errorMsg) + '" onclick="alert(\'上传失败详情：\\n\' + ' + JSON.stringify(errorMsg) + ')">' +
+          '<img class="om-emoji" src="/openmoji/274C.svg" alt="❌"> <span>' + this.escapeHTML(displayMsg) + '</span></span>',
+          0,
+          '#ef4444'
+        );
+        return { error: errorMsg };
+      }
     } finally {
       delete this.activeControllers[task.id];
     }
