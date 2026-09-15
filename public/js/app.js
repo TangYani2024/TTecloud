@@ -135,13 +135,11 @@ const app = {
       if (titleEl) titleEl.innerText = t;
     };
     const siteTitle = (window.__CFG__ && window.__CFG__.siteTitle);
-    if (siteTitle) {
-      applyTitle(siteTitle);
-    } else {
-      fetch('/config.json').then(r => r.json()).then(cfg => {
-        if (cfg && cfg.site && cfg.site.title) applyTitle(cfg.site.title);
-      }).catch(() => {});
-    }
+    if (siteTitle) applyTitle(siteTitle);
+    fetch('/config.json').then(r => r.json()).then(cfg => {
+      window.appConfig = cfg;
+      if (cfg && cfg.site && cfg.site.title) applyTitle(cfg.site.title);
+    }).catch(() => {});
     document.querySelectorAll('.d-b64').forEach(e => e.innerText = atob(e.dataset.b));
     this.refreshSettingsUI();
     this.updateAppHeight();

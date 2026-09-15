@@ -414,7 +414,7 @@ Object.assign(app, {
                   ue = customErr || new Error('分片上传多次重试失败');
                   break;
                 }
-                ct = ct === 'CF_PROXY' ? 'B2_DIRECT' : 'CF_PROXY';
+                if (ct === 'B2_DIRECT') ct = 'CF_PROXY';
                 if (pa[pn] % 2 === 0) {
                   tpList.push(pn);
                   break;
@@ -425,8 +425,10 @@ Object.assign(app, {
           }
         };
 
+        const isCstCloud = !!(window.appConfig && window.appConfig.s3 && window.appConfig.s3.endpoint && window.appConfig.s3.endpoint.includes('cstcloud'));
+        const forceProxy = !!((window.appConfig && window.appConfig.s3 && window.appConfig.s3.forceProxy) || isCstCloud);
         let ws = [];
-        for (let i = 0; i < 8; i++) ws.push(cw(i % 3 === 0 ? 'CF_PROXY' : 'B2_DIRECT'));
+        for (let i = 0; i < 8; i++) ws.push(cw(forceProxy || (i % 3 === 0) ? 'CF_PROXY' : 'B2_DIRECT'));
         await Promise.all(ws);
         await syncChain;
         if (ue) throw ue;

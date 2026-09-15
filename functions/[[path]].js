@@ -6,6 +6,7 @@ const CONFIG = {
   MAX_STORAGE_BYTES: (appConfig && appConfig.storage && appConfig.storage.maxStorageBytes) || (appConfig && appConfig.MAX_STORAGE_BYTES) || 10737418240,
   S3_REGION: (appConfig && appConfig.s3 && appConfig.s3.region) || (appConfig && appConfig.S3_REGION) || 'us-east-005',
   S3_ENDPOINT: ((appConfig && appConfig.s3 && appConfig.s3.endpoint) || (appConfig && appConfig.S3_ENDPOINT) || 'https://s3.us-east-005.backblazeb2.com').replace(/\/+$/, ''),
+  S3_USER_AGENT: (appConfig && appConfig.s3 && appConfig.s3.userAgent) || (appConfig && appConfig.S3_USER_AGENT) || 'S3Drive',
   BUCKETS: {
     RESOURCE: (appConfig && appConfig.s3 && appConfig.s3.buckets && appConfig.s3.buckets.resource) || (appConfig && appConfig.BUCKETS && appConfig.BUCKETS.RESOURCE) || 'tangyani-ziyuan',
     IMAGE: (appConfig && appConfig.s3 && appConfig.s3.buckets && typeof appConfig.s3.buckets.image === 'string') ? appConfig.s3.buckets.image : ((appConfig && appConfig.BUCKETS && typeof appConfig.BUCKETS.IMAGE === 'string') ? appConfig.BUCKETS.IMAGE : '')
@@ -179,6 +180,8 @@ async function awsS3Fetch(u, o, e) {
   }
   const U = new URL(u), M = o.method || 'GET', amz = new Date().toISOString().replace(/[:-]|\.\d{3}/g, ''), dt = amz.slice(0, 8), rh = new Headers(o.headers || {}), sh = new Headers();
   const region = e.S3_REGION || CONFIG.S3_REGION;
+  const userAgent = e.S3_USER_AGENT || CONFIG.S3_USER_AGENT || 'S3Drive';
+  rh.set('User-Agent', userAgent);
   sh.set('host', U.host);
   sh.set('x-amz-date', amz);
   sh.set('x-amz-content-sha256', 'UNSIGNED-PAYLOAD');
