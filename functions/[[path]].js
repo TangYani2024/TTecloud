@@ -111,6 +111,38 @@ async function verifyAdminToken(t, e, c) {
   }
 }
 
+async function initD1Schema(db) {
+  if (!db) return;
+  const stmts = [
+    `CREATE TABLE IF NOT EXISTS files (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      b2_path TEXT NOT NULL,
+      type TEXT NOT NULL,
+      size INTEGER NOT NULL DEFAULT 0,
+      folder TEXT DEFAULT '',
+      is_hidden INTEGER DEFAULT 0,
+      upload_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_files_type ON files(type)`,
+    `CREATE INDEX IF NOT EXISTS idx_files_folder ON files(folder)`,
+    `CREATE INDEX IF NOT EXISTS idx_files_upload_at ON files(upload_at)`,
+    `CREATE TABLE IF NOT EXISTS folder_meta (
+      name TEXT PRIMARY KEY,
+      password TEXT NOT NULL
+    )`,
+    `CREATE TABLE IF NOT EXISTS upload_sessions (
+      file_hash TEXT PRIMARY KEY,
+      b2_file_id TEXT NOT NULL,
+      b2_path TEXT NOT NULL,
+      bucket TEXT NOT NULL,
+      folder TEXT DEFAULT '',
+      uploaded_parts TEXT DEFAULT '[]'
+    )`
+  ];
+  await db.batch(stmts.map(s => db.prepare(s)));
+}
+
 async function awsS3Fetch(u, o, e) {
   const U = new URL(u), M = o.method || 'GET', amz = new Date().toISOString().replace(/[:-]|\.\d{3}/g, ''), dt = amz.slice(0, 8), rh = new Headers(o.headers || {}), sh = new Headers();
   const keyId = e.S3_ACCESS_KEY_ID || e.B2_KEY_ID || e.S3_KEY_ID || '';
@@ -705,9 +737,31 @@ export async function onRequest(context) {
           }, { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
         } catch (dbErr) {
           const isTableMissing = dbErr.message && dbErr.message.toLowerCase().includes('no such table');
-          const errMsg = isTableMissing
-            ? 'D1 数据库未初始化数据表！检测到数据库中缺少核心表。请进入 Cloudflare 后台 -> D1 SQL 数据库 -> 控制台 (Console)，复制仓库中 schema.sql 全部内容并粘贴执行。'
-            : ('数据库异常: ' + dbErr.message);
+          if (isTableMissing) {
+            try {
+              await initD1Schema(e.DB);
+              return Response.json({
+                isAdmin: iA,
+                hasImage: HAS_IMAGE,
+                siteTitle: CONFIG.SITE_TITLE,
+                totalSize: 0,
+                maxSize: CONFIG.MAX_STORAGE_BYTES,
+                mode: hasFolder ? 'files' : 'folders',
+                data: []
+              }, { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
+            } catch (initErr) {
+              return Response.json({
+                isAdmin: iA,
+                hasImage: HAS_IMAGE,
+                siteTitle: CONFIG.SITE_TITLE,
+                totalSize: 0,
+                maxSize: CONFIG.MAX_STORAGE_BYTES,
+                mode: hasFolder ? 'files' : 'folders',
+                data: [],
+                error: '检测到缺少核心数据表，自动初始化建表失败: ' + initErr.message
+              }, { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
+            }
+          }
           return Response.json({
             isAdmin: iA,
             hasImage: HAS_IMAGE,
@@ -716,7 +770,7 @@ export async function onRequest(context) {
             maxSize: CONFIG.MAX_STORAGE_BYTES,
             mode: hasFolder ? 'files' : 'folders',
             data: [],
-            error: errMsg
+            error: '数据库异常: ' + dbErr.message
           }, { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
         }
       }
@@ -911,6 +965,12 @@ export async function onRequest(context) {
 
       return Response.json({ ok: false, error: '接口不存在' }, { status: 404 });
     } catch (err) {
+      if (err.message && err.message.toLowerCase().includes('no such table') && e.DB) {
+        try {
+          await initD1Schema(e.DB);
+          return Response.json({ ok: false, error: '检测到缺少数据库表，已为您自动初始化完成！请重试操作。' }, { status: 500 });
+        } catch (_) {}
+      }
       return Response.json({ ok: false, error: err.message }, { status: 500 });
     }
   }
