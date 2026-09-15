@@ -128,6 +128,12 @@ const app = {
 
 
   async init() {
+    const siteTitle = (window.__CFG__ && window.__CFG__.siteTitle);
+    if (siteTitle) {
+      document.title = siteTitle;
+      const titleEl = document.querySelector('.header-title span');
+      if (titleEl) titleEl.innerText = siteTitle;
+    }
     document.querySelectorAll('.d-b64').forEach(e => e.innerText = atob(e.dataset.b));
     this.refreshSettingsUI();
     this.updateAppHeight();
@@ -401,7 +407,11 @@ const app = {
       }
       
       const rs = await r.json();
-      this.state.isAdmin = rs.isAdmin;
+      if (!r.ok) {
+        throw new Error(rs.error || ('网络/接口异常 (' + r.status + ')'));
+      }
+
+      this.state.isAdmin = !!rs.isAdmin;
       if (rs.hasImage !== undefined) {
         this.state.hasImage = !!rs.hasImage;
       }
@@ -450,6 +460,11 @@ const app = {
       } else {
         document.getElementById('storage-card').style.display = 'none';
       }
+
+      if (rs.error) {
+        a.innerHTML = '<div style="text-align:center;padding:50px 20px;color:#ef4444;"><div style="font-size:32px;margin-bottom:12px;">⚠️</div><div style="font-weight:bold;font-size:15px;margin-bottom:8px;">' + this.escapeHTML(rs.error) + '</div><div style="font-size:13px;color:gray;">若首次部署，请确保在 Cloudflare Pages 后台绑定 D1 数据库 (变量名 DB)。</div></div>';
+        return;
+      }
       
       this.state.fileList = rs.data || [];
       if (rs.mode === 'folders') {
@@ -459,6 +474,10 @@ const app = {
       else this.renderFiles(rs.data);
     } catch (e) {
       console.error('fetchData error:', e);
+      const authBtn = document.getElementById('auth-btn');
+      if (authBtn && !authBtn.innerHTML.trim()) {
+        authBtn.innerHTML = '<a href="/login" class="btn btn-sm btn-outline">管理登录</a>';
+      }
       const a = document.getElementById('dynamic-area');
       if (a) {
         a.innerHTML = '<div style="text-align:center;padding:60px 20px;color:#ef4444;"><div style="font-size:28px;margin-bottom:10px;">⚠️</div><div style="font-weight:bold;margin-bottom:6px;">加载失败，请刷新重试</div><div style="font-size:12px;color:gray;">' + this.escapeHTML(e.message || e) + '</div></div>';
@@ -484,14 +503,15 @@ const app = {
   },
 
   renderFolders(arr) {
-    this.state.folderList = arr || [];
+    const list = Array.isArray(arr) ? arr : [];
+    this.state.folderList = list;
     const a = document.getElementById('dynamic-area');
-    if (!arr.length) {
+    if (!list.length) {
       a.innerHTML = '<p style="text-align:center;color:gray;margin-top:40px">空空如也~</p>';
       return;
     }
     let h = '<div class="grid-view">';
-    arr.forEach((f, idx) => {
+    list.forEach((f, idx) => {
       const rawName = (f.name === null || f.name === undefined) ? '' : String(f.name);
       const sn = this.escapeHTML(rawName);
       const isLocked = f.locked === 'true' || f.locked === '1' || f.locked === true || f.locked === 1;
@@ -553,13 +573,14 @@ const app = {
   },
 
   renderFiles(arr) {
+    const list = Array.isArray(arr) ? arr : [];
     const a = document.getElementById('dynamic-area');
-    if (!arr.length) {
+    if (!list.length) {
       a.innerHTML = '<p style="text-align:center;color:gray;margin-top:40px">暂无文件~</p>';
       return;
     }
     let h = '<div class="grid-view">';
-    arr.forEach(f => {
+    list.forEach(f => {
       const sn = this.escapeHTML(f.name),
             ext = (f.name.split('.').pop() || '').toLowerCase(),
             sp = (this.state.view === 'image' || ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'ico'].includes(ext)),

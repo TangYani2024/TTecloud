@@ -1,6 +1,7 @@
 import appConfig from '../config.json';
 
 const CONFIG = {
+  SITE_TITLE: (appConfig && appConfig.site && appConfig.site.title) || '糖糖云盘',
   AUTH_COOKIE_NAME: (appConfig && appConfig.site && appConfig.site.cookieName) || (appConfig && appConfig.AUTH_COOKIE_NAME) || 'TangYani_Admin_Token',
   MAX_STORAGE_BYTES: (appConfig && appConfig.storage && appConfig.storage.maxStorageBytes) || (appConfig && appConfig.MAX_STORAGE_BYTES) || 10737418240,
   S3_REGION: (appConfig && appConfig.s3 && appConfig.s3.region) || (appConfig && appConfig.S3_REGION) || 'us-east-005',
@@ -147,7 +148,8 @@ function getS3Client(e) {
 }
 
 function rLP(cfg) {
-  return '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>登录 - 糖糖云盘</title><link rel="stylesheet" href="/css/style.css"><style>:root{--bgc:#ffffff;--tx:#1e293b;--cb:rgba(255,255,255,0.65);--cd:rgba(0,0,0,0.08)}body{font-family:-apple-system,sans-serif;background-color:var(--bgc);color:var(--tx);margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh}.c{background:var(--cb);padding:35px 25px;border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,0.06);width:90%;max-width:350px;border:1px solid var(--cd);text-align:center;backdrop-filter:blur(16px) saturate(150%);-webkit-backdrop-filter:blur(16px) saturate(150%)}input,button{width:100%;padding:14px;margin:10px 0;box-sizing:border-box;border-radius:12px;border:1px solid var(--cd);background:rgba(0,0,0,0.03);color:inherit;outline:none;font-size:15px;transition:0.3s}input:focus{border-color:#3b82f6;background:rgba(0,0,0,0.05)}button{background:#3b82f6;color:#fff;border:none;cursor:pointer;font-weight:bold;margin-top:15px}button:hover{background:#2563eb;transform:translateY(-2px)}</style></head><body>' + getBgLayer(cfg) + '<div class="c"><h2 style="margin-top:0;font-size:22px;display:flex;align-items:center;justify-content:center;gap:6px"><img class="om-emoji om-emoji-lg" src="/openmoji/1F510.svg" alt="🔐"> 管理员验证</h2><p style="color:gray;font-size:13px;margin-bottom:20px">需要鉴权以访问核心控制面板</p><form action="/login" method="post"><input name="username" placeholder="账号" required><input type="password" name="password" placeholder="密码" required><button type="submit">登 录</button></form><a href="/" style="display:inline-block;margin-top:15px;font-size:13px;color:gray;text-decoration:none;">&larr; 返回首页</a></div></body></html>';
+  const siteTitle = escapeHTML(CONFIG.SITE_TITLE);
+  return '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>登录 - ' + siteTitle + '</title><link rel="stylesheet" href="/css/style.css"><style>:root{--bgc:#ffffff;--tx:#1e293b;--cb:rgba(255,255,255,0.65);--cd:rgba(0,0,0,0.08)}body{font-family:-apple-system,sans-serif;background-color:var(--bgc);color:var(--tx);margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh}.c{background:var(--cb);padding:35px 25px;border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,0.06);width:90%;max-width:350px;border:1px solid var(--cd);text-align:center;backdrop-filter:blur(16px) saturate(150%);-webkit-backdrop-filter:blur(16px) saturate(150%)}input,button{width:100%;padding:14px;margin:10px 0;box-sizing:border-box;border-radius:12px;border:1px solid var(--cd);background:rgba(0,0,0,0.03);color:inherit;outline:none;font-size:15px;transition:0.3s}input:focus{border-color:#3b82f6;background:rgba(0,0,0,0.05)}button{background:#3b82f6;color:#fff;border:none;cursor:pointer;font-weight:bold;margin-top:15px}button:hover{background:#2563eb;transform:translateY(-2px)}</style></head><body>' + getBgLayer(cfg) + '<div class="c"><h2 style="margin-top:0;font-size:22px;display:flex;align-items:center;justify-content:center;gap:6px"><img class="om-emoji om-emoji-lg" src="/openmoji/1F510.svg" alt="🔐"> 管理员验证</h2><p style="color:gray;font-size:13px;margin-bottom:20px">需要鉴权以访问核心控制面板</p><form action="/login" method="post"><input name="username" placeholder="账号" required><input type="password" name="password" placeholder="密码" required><button type="submit">登 录</button></form><a href="/" style="display:inline-block;margin-top:15px;font-size:13px;color:gray;text-decoration:none;">&larr; 返回首页</a></div></body></html>';
 }
 
 function rR(m, u, cfg) {
@@ -163,12 +165,12 @@ function getShareIconSvg(name) {
     return '<svg viewBox="0 0 24 24" width="70" height="70" fill="none"><rect x="2" y="6" width="20" height="12" rx="2.5" fill="#1E3A5F" fill-opacity="0.35" stroke="#4A9EFF" stroke-width="1.2" stroke-linecap="round"/><rect x="5" y="9" width="3" height="6" rx="0.8" fill="#4A9EFF" fill-opacity="0.2"/><rect x="16" y="9" width="3" height="6" rx="0.8" fill="#4A9EFF" fill-opacity="0.2"/><circle cx="12" cy="12" r="2.8" fill="#FF6B9D" fill-opacity="0.35" stroke="#FF6B9D" stroke-width="1" stroke-linecap="round"/><path d="M11 10.8v2.4l2-1.2-2-1.2Z" fill="#FFB3D1" fill-opacity="0.7"/></svg>';
   }
   if (['mp3', 'flac', 'wav', 'aac', 'ogg', 'm4a'].includes(ext)) {
-    return '<svg viewBox="0 0 24 24" width="70" height="70" fill="none"><circle cx="8" cy="17" r="3.2" fill="#C445B5" fill-opacity="0.2" stroke="#C445B5" stroke-width="1.2" stroke-linecap="round"/><circle cx="18" cy="15" r="3.2" fill="#C445B5" fill-opacity="0.2" stroke="#C445B5" stroke-width="1.2" stroke-linecap="round"/><path d="M11 17V6l9-2v11" stroke="#C445B5" stroke-width="1.3" fill="none" stroke-opacity="0.7" stroke-linecap="round"/><path d="M11 11l9-2" stroke="#C445B5" stroke-width="1.1" fill="none" stroke-opacity="0.5" stroke-linecap="round"/><circle cx="8" cy="17" r="1" fill="#FFE066" fill-opacity="0.6"/><circle cx="18" cy="15" r="1" fill="#FFE066" fill-opacity="0.6"/></svg>';
+    return '<svg viewBox="0 0 24 24" width="70" height="70" fill="none"><rect x="3" y="4" width="18" height="16" rx="3" fill="#FFEAA7" fill-opacity="0.25" stroke="#FDCB6E" stroke-width="1.2" stroke-linecap="round"/><circle cx="9" cy="14" r="2.5" fill="#E17055" fill-opacity="0.5"/><circle cx="15" cy="12" r="2.5" fill="#E17055" fill-opacity="0.5"/><path d="M11.5 14V8l6-2v6" stroke="#E17055" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   }
   if (['js', 'ts', 'html', 'css', 'json', 'py', 'java', 'c', 'cpp', 'sh', 'sql'].includes(ext)) {
     return '<svg viewBox="0 0 24 24" width="70" height="70" fill="none"><path d="M6 3h8l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" fill="#1E2A3A" fill-opacity="0.4" stroke="#61DAFB" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 3v5h5" fill="none" stroke="#61DAFB" stroke-width="1.2" stroke-opacity="0.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M10.5 13.5L8.5 16l2 2.5" stroke="#61DAFB" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="0.9"/><path d="M13.5 13.5l2 2.5-2 2.5" stroke="#61DAFB" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="0.9"/><circle cx="12" cy="9" r="1" fill="#F0DB4F" fill-opacity="0.6"/></svg>';
   }
-  return '<svg viewBox="0 0 24 24" width="70" height="70" fill="none"><path d="M6 3h8l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" fill="#E0ECFF" fill-opacity="0.15" stroke="#8AB8E8" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 3v5h5" fill="none" stroke="#8AB8E8" stroke-width="1.2" stroke-opacity="0.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 13h6M9 17h4" stroke="#8AB8E8" stroke-width="1.1" stroke-linecap="round" stroke-opacity="0.5"/></svg>';
+  return '<svg viewBox="0 0 24 24" width="70" height="70" fill="none"><path d="M6 3h8l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" fill="#6C5CE7" fill-opacity="0.12" stroke="#6C5CE7" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 3v5h5" fill="#A29BFE" fill-opacity="0.25" stroke="#6C5CE7" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 13h6M9 17h4" stroke="#6C5CE7" stroke-width="1.2" stroke-linecap="round"/></svg>';
 }
 
 function rSP(f, o, p, cfg) {
@@ -177,11 +179,12 @@ function rSP(f, o, p, cfg) {
   const fSize = Number(f.size) || 0;
   const fSizeStr = (fSize / 1048576).toFixed(2) + ' MB';
   const isSmall = fSize < 20 * 1024 * 1024;
+  const siteTitle = escapeHTML(CONFIG.SITE_TITLE);
   const fastDlBtn = isSmall
     ? '<a href="' + dlUrl + '" download="' + s + '" class="btn btn-outline" style="text-decoration:none"><img class="om-emoji" src="/openmoji/1F4E5.svg" alt="📥"> 网页下载</a>'
     : '<button type="button" class="btn btn-outline" onclick="smartDl()"><img class="om-emoji" src="/openmoji/1F4E5.svg" alt="📥"> 网页下载</button>';
 
-  return '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>' + s + ' - 糖糖云盘</title><link rel="stylesheet" href="/css/style.css"><style>:root{--bgc:#ffffff;--tx:#1e293b;--cb:rgba(255,255,255,0.65);--cd:rgba(0,0,0,0.08)}body{font-family:-apple-system,sans-serif;background-color:var(--bgc);color:var(--tx);margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh}.c{background:var(--cb);padding:30px;border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,0.06);border:1px solid var(--cd);text-align:center;max-width:400px;width:90%;backdrop-filter:blur(16px) saturate(150%);-webkit-backdrop-filter:blur(16px) saturate(150%)}img{max-width:100%;border-radius:12px;box-shadow:0 4px 15px rgba(0,0,0,0.1)}.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:12px 24px;border-radius:10px;font-weight:bold;transition:0.3s;box-sizing:border-box}.btn:hover{transform:scale(1.02)}.modal-overlay{position:fixed;inset:0;background:rgba(255,255,255,0.25);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);display:flex;align-items:center;justify-content:center;z-index:2000}.modal-content{background:var(--cb);padding:24px;border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,0.15);border:1px solid var(--cd);max-width:380px;width:90%;backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}</style></head><body>' + getBgLayer(cfg) + '<div class="c"><div style="margin:10px auto 15px auto;display:flex;align-items:center;justify-content:center;">' + (sp ? '<img src="' + o + '/file/' + f.id + (w ? '?' + w.slice(1) : '') + '">' : getShareIconSvg(f.name)) + '</div><h3>' + s + '</h3><p style="color:gray;font-size:14px;margin-bottom:15px">' + fSizeStr + '</p><div id="share-action-container" style="display:flex;flex-direction:column;gap:10px">' + fastDlBtn + '<a href="' + dlUrl + '" class="btn btn-outline" style="text-decoration:none"><img class="om-emoji" src="/openmoji/1F4E5.svg" alt="📥"> 原生下载</a></div></div><script>' +
+  return '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>' + s + ' - ' + siteTitle + '</title><link rel="stylesheet" href="/css/style.css"><style>:root{--bgc:#ffffff;--tx:#1e293b;--cb:rgba(255,255,255,0.65);--cd:rgba(0,0,0,0.08)}body{font-family:-apple-system,sans-serif;background-color:var(--bgc);color:var(--tx);margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh}.c{background:var(--cb);padding:30px;border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,0.06);border:1px solid var(--cd);text-align:center;max-width:400px;width:90%;backdrop-filter:blur(16px) saturate(150%);-webkit-backdrop-filter:blur(16px) saturate(150%)}img{max-width:100%;border-radius:12px;box-shadow:0 4px 15px rgba(0,0,0,0.1)}.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:12px 24px;border-radius:10px;font-weight:bold;transition:0.3s;box-sizing:border-box}.btn:hover{transform:scale(1.02)}.modal-overlay{position:fixed;inset:0;background:rgba(255,255,255,0.25);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);display:flex;align-items:center;justify-content:center;z-index:2000}.modal-content{background:var(--cb);padding:24px;border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,0.15);border:1px solid var(--cd);max-width:380px;width:90%;backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}</style></head><body>' + getBgLayer(cfg) + '<div class="c"><div style="margin:10px auto 15px auto;display:flex;align-items:center;justify-content:center;">' + (sp ? '<img src="' + o + '/file/' + f.id + (w ? '?' + w.slice(1) : '') + '">' : getShareIconSvg(f.name)) + '</div><h3>' + s + '</h3><p style="color:gray;font-size:14px;margin-bottom:15px">' + fSizeStr + '</p><div id="share-action-container" style="display:flex;flex-direction:column;gap:10px">' + fastDlBtn + '<a href="' + dlUrl + '" class="btn btn-outline" style="text-decoration:none"><img class="om-emoji" src="/openmoji/1F4E5.svg" alt="📥"> 原生下载</a></div></div><script>' +
   'const FILE = { name: ' + JSON.stringify(f.name) + ', size: ' + fSize + ', url: ' + JSON.stringify(dlUrl) + ' };' +
   'function formatBytes(b) { if (!b) return "0 B"; const k = 1024, s = ["B", "KB", "MB", "GB", "TB"], i = Math.floor(Math.log(b) / Math.log(k)); return parseFloat((b / Math.pow(k, i)).toFixed(2)) + " " + s[i]; }' +
   'function copyTxt(t) { if (navigator.clipboard && window.isSecureContext) { navigator.clipboard.writeText(t).catch(() => prompt("复制:", t)); } else { const a = document.createElement("textarea"); a.value = t; document.body.appendChild(a); a.select(); try { document.execCommand("copy"); } catch(e){} a.remove(); } }' +
@@ -292,7 +295,10 @@ export async function onRequest(context) {
     const res = await next();
     if (res && res.status === 200) {
       let html = await res.text();
-      const clientCfg = Object.assign({}, cfg, { hasImageBucket: HAS_IMAGE });
+      const siteTitle = escapeHTML(CONFIG.SITE_TITLE);
+      html = html.replace(/<title>.*?<\/title>/, `<title>${siteTitle}</title>`);
+      html = html.replace(/(<h2 class="header-title">[\s\S]*?<span>).*?(<\/span>)/, `$1${siteTitle}$2`);
+      const clientCfg = Object.assign({}, cfg, { hasImageBucket: HAS_IMAGE, siteTitle: CONFIG.SITE_TITLE });
       html = html.replace('</head>', `<script>window.__CFG__=${JSON.stringify(clientCfg)};</script></head>`);
       const h = new Headers(res.headers);
       h.set('Content-Type', 'text/html;charset=UTF-8');
@@ -625,56 +631,79 @@ export async function onRequest(context) {
         const hasFolder = U.searchParams.has('folder');
         const tF = hasFolder ? U.searchParams.get('folder') : null;
         const q = U.searchParams.get('q') || '';
-        if (Date.now() - globalLastSizeCalcTime > 600000) {
-          globalCachedTotalSize = (await e.DB.prepare("SELECT SUM(size) as t FROM files").first())?.t || 0;
-          globalLastSizeCalcTime = Date.now();
+        if (!e.DB) {
+          return Response.json({
+            isAdmin: iA,
+            hasImage: HAS_IMAGE,
+            totalSize: 0,
+            maxSize: CONFIG.MAX_STORAGE_BYTES,
+            mode: hasFolder ? 'files' : 'folders',
+            data: [],
+            error: '请在 Cloudflare Pages 中绑定 D1 数据库 (变量名: DB)'
+          }, { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
         }
-        if (!hasFolder && !q) {
-          const { results: R } = await e.DB.prepare("SELECT f.folder, COUNT(f.id) as count, SUM(f.size) as size, m.password FROM files f LEFT JOIN folder_meta m ON f.folder = m.name WHERE f.type=? " + (iA ? '' : 'AND f.is_hidden=0') + " GROUP BY f.folder ORDER BY f.folder ASC").bind(bk).all();
+        try {
+          if (Date.now() - globalLastSizeCalcTime > 600000) {
+            globalCachedTotalSize = (await e.DB.prepare("SELECT SUM(size) as t FROM files").first())?.t || 0;
+            globalLastSizeCalcTime = Date.now();
+          }
+          if (!hasFolder && !q) {
+            const { results: R } = await e.DB.prepare("SELECT f.folder, COUNT(f.id) as count, SUM(f.size) as size, m.password FROM files f LEFT JOIN folder_meta m ON f.folder = m.name WHERE f.type=? " + (iA ? '' : 'AND f.is_hidden=0') + " GROUP BY f.folder ORDER BY f.folder ASC").bind(bk).all();
+            return Response.json({
+              isAdmin: iA,
+              hasImage: HAS_IMAGE,
+              totalSize: globalCachedTotalSize,
+              maxSize: CONFIG.MAX_STORAGE_BYTES,
+              mode: 'folders',
+              data: (R || []).map(r => ({ name: r.folder ?? '', count: r.count, size: r.size, locked: !!r.password }))
+            }, { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
+          }
+          let qry = "SELECT f.*, m.password FROM files f LEFT JOIN folder_meta m ON f.folder = m.name WHERE f.type=? " + (iA ? '' : 'AND f.is_hidden=0'), prm = [bk];
+          if (hasFolder) {
+            if (!tF || !tF.trim()) {
+              qry += " AND (f.folder = ? OR f.folder IS NULL OR TRIM(COALESCE(f.folder, '')) = '')";
+              prm.push(tF || '');
+            } else {
+              qry += " AND f.folder=?";
+              prm.push(tF);
+            }
+          }
+          if (q) { qry += " AND f.name LIKE ?"; prm.push('%' + q + '%'); }
+          const { results: R } = await e.DB.prepare(qry + " ORDER BY f.upload_at DESC").bind(...prm).all();
+          let fF = [];
+          let folderUnlockedMap = {};
+          for (const f of (R || [])) {
+            if (!iA && f.password) {
+              const fKey = f.folder || '';
+              if (!(fKey in folderUnlockedMap)) {
+                const hash = await hashSha256(fKey);
+                const lM = C.match(new RegExp('(?:^|; )lock_' + hash + '=([^;]*)'));
+                folderUnlockedMap[fKey] = !!(lM && decodeURIComponent(lM[1]) === f.password);
+              }
+              if (!folderUnlockedMap[fKey]) continue;
+            }
+            fF.push({ id: f.id, name: f.name, size: f.size, folder: f.folder || '', is_hidden: f.is_hidden, upload_at: f.upload_at });
+          }
           return Response.json({
             isAdmin: iA,
             hasImage: HAS_IMAGE,
             totalSize: globalCachedTotalSize,
             maxSize: CONFIG.MAX_STORAGE_BYTES,
-            mode: 'folders',
-            data: R.map(r => ({ name: r.folder ?? '', count: r.count, size: r.size, locked: !!r.password }))
+            mode: 'files',
+            data: fF,
+            folderMeta: (R && R.length) ? !!R[0].password : false
+          }, { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
+        } catch (dbErr) {
+          return Response.json({
+            isAdmin: iA,
+            hasImage: HAS_IMAGE,
+            totalSize: 0,
+            maxSize: CONFIG.MAX_STORAGE_BYTES,
+            mode: hasFolder ? 'files' : 'folders',
+            data: [],
+            error: '数据库查询异常: ' + dbErr.message
           }, { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
         }
-        let qry = "SELECT f.*, m.password FROM files f LEFT JOIN folder_meta m ON f.folder = m.name WHERE f.type=? " + (iA ? '' : 'AND f.is_hidden=0'), prm = [bk];
-        if (hasFolder) {
-          if (!tF || !tF.trim()) {
-            qry += " AND (f.folder = ? OR f.folder IS NULL OR TRIM(COALESCE(f.folder, '')) = '')";
-            prm.push(tF || '');
-          } else {
-            qry += " AND f.folder=?";
-            prm.push(tF);
-          }
-        }
-        if (q) { qry += " AND f.name LIKE ?"; prm.push('%' + q + '%'); }
-        const { results: R } = await e.DB.prepare(qry + " ORDER BY f.upload_at DESC").bind(...prm).all();
-        let fF = [];
-        let folderUnlockedMap = {};
-        for (const f of R) {
-          if (!iA && f.password) {
-            const fKey = f.folder || '';
-            if (!(fKey in folderUnlockedMap)) {
-              const hash = await hashSha256(fKey);
-              const lM = C.match(new RegExp('(?:^|; )lock_' + hash + '=([^;]*)'));
-              folderUnlockedMap[fKey] = !!(lM && decodeURIComponent(lM[1]) === f.password);
-            }
-            if (!folderUnlockedMap[fKey]) continue;
-          }
-          fF.push({ id: f.id, name: f.name, size: f.size, folder: f.folder || '', is_hidden: f.is_hidden, upload_at: f.upload_at });
-        }
-        return Response.json({
-          isAdmin: iA,
-          hasImage: HAS_IMAGE,
-          totalSize: globalCachedTotalSize,
-          maxSize: CONFIG.MAX_STORAGE_BYTES,
-          mode: 'files',
-          data: fF,
-          folderMeta: R.length ? !!R[0].password : false
-        }, { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
       }
 
       if (P === '/api/unlock') {
