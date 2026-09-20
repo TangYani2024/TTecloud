@@ -687,13 +687,18 @@ export async function onRequest(context) {
             if (!r.shareId) { r.shareId = generateShortId(8); configNeedsSave = true; }
             return r;
           });
-          // 死链检测与自愈：检查各规则记录的文件是否依然存在于 D1 数据库中，若已不存在则自动清理死链并重置
+          // 历史存量文件全自动无感补齐打标 (Backfill) + 死链检测自愈
           if (e.DB) {
+            await initD1Schema(e.DB);
             for (const r of rules) {
               if (r.lastFiles && r.lastFiles.length > 0) {
                 const ids = r.lastFiles.map(f => f.id).filter(Boolean);
                 if (ids.length > 0) {
                   try {
+                    // 1. 全自动补标：将以往追更成功但尚未打标的历史文件批量补打上专属任务标记 sync_rule_id
+                    await e.DB.prepare(`UPDATE files SET sync_rule_id = ? WHERE id IN (${ids.map(() => '?').join(',')}) AND (sync_rule_id IS NULL OR sync_rule_id = '')`).bind(r.id, ...ids).run();
+
+                    // 2. 死链检测与自愈
                     const { results: existingRows } = await e.DB.prepare(`SELECT id FROM files WHERE id IN (${ids.map(() => '?').join(',')})`).bind(...ids).all();
                     const existingSet = new Set((existingRows || []).map(row => row.id));
                     const validFiles = r.lastFiles.filter(f => existingSet.has(f.id));
@@ -708,6 +713,15 @@ export async function onRequest(context) {
                     }
                   } catch (_) {}
                 }
+              } else if (r.id) {
+                // 3. 反向自愈挂载：若规则 lastFiles 为空，但数据库中存有打上了本任务标记的文件，自动找回并重新挂载
+                try {
+                  const { results: markedFiles } = await e.DB.prepare("SELECT id, name, b2_path, type as bucket FROM files WHERE sync_rule_id=?").bind(r.id).all();
+                  if (markedFiles && markedFiles.length > 0) {
+                    r.lastFiles = markedFiles;
+                    configNeedsSave = true;
+                  }
+                } catch (_) {}
               }
             }
           }
@@ -755,11 +769,14 @@ export async function onRequest(context) {
         const rule = rules.find(r => r.id === ruleId);
         if (!rule) return Response.json({ ok: false, error: '未找到该追更任务' }, { headers: { 'Cache-Control': 'no-store' } });
 
-        // 死链自愈检查：检测此前追更记录的文件在 D1 中是否依然存在，若已被用户本地删除则重置追更记录
+        // 死链自愈检查与存量文件无感打标补齐：
         if (rule.lastFiles && rule.lastFiles.length > 0 && e.DB) {
           const checkIds = rule.lastFiles.map(f => f.id).filter(Boolean);
           if (checkIds.length > 0) {
             try {
+              // 存量打标：将之前已追更但未打标的历史文件批量补打上 sync_rule_id
+              await e.DB.prepare(`UPDATE files SET sync_rule_id = ? WHERE id IN (${checkIds.map(() => '?').join(',')}) AND (sync_rule_id IS NULL OR sync_rule_id = '')`).bind(rule.id, ...checkIds).run();
+
               const { results: existingRows } = await e.DB.prepare(`SELECT id FROM files WHERE id IN (${checkIds.map(() => '?').join(',')})`).bind(...checkIds).all();
               const existingSet = new Set((existingRows || []).map(r => r.id));
               rule.lastFiles = rule.lastFiles.filter(f => existingSet.has(f.id));
@@ -922,6 +939,12 @@ export async function onRequest(context) {
               matchedOldFile = await e.DB.prepare("SELECT id, name, b2_path, type as bucket FROM files WHERE id=?").bind(rule.lastFiles[0].id).first();
             } catch (_) {}
           }
+          // 存量智能认领：如果既没标记也没在 lastFiles 中，但目标目录下有同名未标记的文件，自动认领为存量旧版本！
+          if (!matchedOldFile) {
+            try {
+              matchedOldFile = await e.DB.prepare("SELECT id, name, b2_path, type as bucket FROM files WHERE folder=? AND name=? AND (sync_rule_id IS NULL OR sync_rule_id = '') LIMIT 1").bind(targetFolder, cleanFileName).first();
+            } catch (_) {}
+          }
 
           let fileId = '';
           if (matchedOldFile && matchedOldFile.id) {
@@ -999,6 +1022,43 @@ export async function onRequest(context) {
           try {
             const { results } = await e.DB.prepare("SELECT id, name, b2_path, type as bucket FROM files WHERE sync_rule_id=?").bind(rule.id).all();
             if (results) existingRuleFiles = results;
+          } catch (_) {}
+
+          // 存量补标认领 1：若 rule.lastFiles 里的老文件尚未打标，自动补查并认领进 existingRuleFiles
+          if (rule.lastFiles && rule.lastFiles.length > 0) {
+            const missingIds = rule.lastFiles.map(f => f.id).filter(id => id && !existingRuleFiles.some(ef => ef.id === id));
+            if (missingIds.length > 0) {
+              try {
+                const { results: backfillRows } = await e.DB.prepare(`SELECT id, name, b2_path, type as bucket FROM files WHERE id IN (${missingIds.map(() => '?').join(',')})`).bind(...missingIds).all();
+                if (backfillRows && backfillRows.length > 0) {
+                  for (const bfr of backfillRows) {
+                    existingRuleFiles.push(bfr);
+                    await e.DB.prepare("UPDATE files SET sync_rule_id=? WHERE id=? AND (sync_rule_id IS NULL OR sync_rule_id = '')").bind(rule.id, bfr.id).run();
+                  }
+                }
+              } catch (_) {}
+            }
+          }
+
+          // 存量补标认领 2：若目标目录下存在同名或相符但未打标的历史老文件，自动认领进任务并打标
+          try {
+            const { results: folderUnmarked } = await e.DB.prepare("SELECT id, name, b2_path, type as bucket FROM files WHERE folder=? AND (sync_rule_id IS NULL OR sync_rule_id = '')").bind(targetFolder).all();
+            if (folderUnmarked && folderUnmarked.length > 0) {
+              for (const fum of folderUnmarked) {
+                if (!existingRuleFiles.some(ef => ef.id === fum.id)) {
+                  const fumName = (fum.name || '').toLowerCase();
+                  const isMatchingAsset = matchedAssets.some(a => {
+                    const an = (a.name || '').toLowerCase();
+                    const baseK = an.replace(/[0-9._-]/g, '');
+                    return an === fumName || (baseK.length >= 3 && fumName.includes(baseK));
+                  });
+                  if (isMatchingAsset) {
+                    existingRuleFiles.push(fum);
+                    await e.DB.prepare("UPDATE files SET sync_rule_id=? WHERE id=? AND (sync_rule_id IS NULL OR sync_rule_id = '')").bind(rule.id, fum.id).run();
+                  }
+                }
+              }
+            }
           } catch (_) {}
 
           const usedOldIds = new Set();
