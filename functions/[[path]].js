@@ -462,22 +462,27 @@ export async function onRequest(context) {
     let { results: R } = await e.DB.prepare("SELECT * FROM files WHERE id=?").bind(rawId).all();
     if (R.length) {
       fileObj = R[0];
-      // 检查当前文件是否属于某个追更规则，若该规则已有更新的版本，自动对准最新活跃文件
+      // 检查当前文件是否属于某个追更规则，优先根据 sync_rule_id 标记强关联
       const cfgData = await getSiteConfig(e, false);
       const rules = cfgData.githubSyncRules || [];
       matchedRule = rules.find(r => 
+        (fileObj.sync_rule_id && fileObj.sync_rule_id === r.id) ||
         (r.shareId && r.shareId === rawId) || 
         r.id === rawId || 
         (r.historyIds && r.historyIds.includes(rawId)) ||
-        (r.lastFiles && r.lastFiles.some(lf => lf.id === fileObj.id)) ||
-        (fileObj.folder && (r.folder === fileObj.folder || (r.repo && r.repo.includes(fileObj.folder))))
+        (r.lastFiles && r.lastFiles.some(lf => lf.id === fileObj.id))
       );
-      if (matchedRule && matchedRule.lastFiles && matchedRule.lastFiles.length > 0) {
-        const latestMeta = matchedRule.lastFiles[0];
-        if (latestMeta.id !== fileObj.id) {
-          const res = await e.DB.prepare("SELECT * FROM files WHERE id=?").bind(latestMeta.id).all();
-          if (res.results && res.results.length) fileObj = res.results[0];
+      if (matchedRule) {
+        // 核心关联：根据 sync_rule_id 标记自动对准该任务最新活跃文件
+        let latestFile = null;
+        try {
+          latestFile = await e.DB.prepare("SELECT * FROM files WHERE sync_rule_id=? ORDER BY upload_at DESC LIMIT 1").bind(matchedRule.id).first();
+        } catch (_) {}
+        if (!latestFile && matchedRule.lastFiles && matchedRule.lastFiles.length > 0) {
+          const latestMeta = matchedRule.lastFiles[0];
+          latestFile = await e.DB.prepare("SELECT * FROM files WHERE id=?").bind(latestMeta.id).first();
         }
+        if (latestFile && latestFile.id) fileObj = latestFile;
       }
       // 手动访问或分享老文件时：若仍是老 UUID(>8位)，自动替换为8位安全短ID并废除老UUID
       if (fileObj.id && fileObj.id.length > 8) {
@@ -516,15 +521,24 @@ export async function onRequest(context) {
         } catch (err) {}
       }
     } else {
-      // 若 D1 中未直接命中 ID，检索是否是规则的 shareId、ruleId 或历史 ID (historyIds)
+      // 若 D1 中未直接命中 ID，说明是用 8位固定直链 (rule.shareId) 或 rule.id 访问
       const cfgData = await getSiteConfig(e, true);
       const rules = cfgData.githubSyncRules || [];
       matchedRule = rules.find(r => (r.shareId && r.shareId === rawId) || r.id === rawId || (r.historyIds && r.historyIds.includes(rawId)));
       if (matchedRule) {
-        const activeFile = (matchedRule.lastFiles && matchedRule.lastFiles[0]) || (matchedRule.pendingFiles && matchedRule.pendingFiles[0]);
-        if (activeFile && activeFile.id) {
-          const res = await e.DB.prepare("SELECT * FROM files WHERE id=?").bind(activeFile.id).all();
-          if (res.results && res.results.length) fileObj = res.results[0];
+        // 核心关联：直接根据该规则的标记 sync_rule_id 从数据库捞取最新活跃文件！
+        try {
+          const markedLatest = await e.DB.prepare("SELECT * FROM files WHERE sync_rule_id=? ORDER BY upload_at DESC LIMIT 1").bind(matchedRule.id).first();
+          if (markedLatest && markedLatest.id) {
+            fileObj = markedLatest;
+          }
+        } catch (_) {}
+        if (!fileObj) {
+          const activeFile = (matchedRule.lastFiles && matchedRule.lastFiles[0]) || (matchedRule.pendingFiles && matchedRule.pendingFiles[0]);
+          if (activeFile && activeFile.id) {
+            const res = await e.DB.prepare("SELECT * FROM files WHERE id=?").bind(activeFile.id).all();
+            if (res.results && res.results.length) fileObj = res.results[0];
+          }
         }
       }
     }
@@ -543,28 +557,42 @@ export async function onRequest(context) {
       const cfgData = await getSiteConfig(e, false);
       const rules = cfgData.githubSyncRules || [];
       matchedRule = rules.find(r => 
+        (f.sync_rule_id && f.sync_rule_id === r.id) ||
         (r.shareId && r.shareId === rawId) || 
         r.id === rawId || 
         (r.historyIds && r.historyIds.includes(rawId)) ||
-        (r.lastFiles && r.lastFiles.some(lf => lf.id === f.id)) ||
-        (f.folder && (r.folder === f.folder || (r.repo && r.repo.includes(f.folder))))
+        (r.lastFiles && r.lastFiles.some(lf => lf.id === f.id))
       );
-      if (matchedRule && matchedRule.lastFiles && matchedRule.lastFiles.length > 0) {
-        const latestMeta = matchedRule.lastFiles[0];
-        if (latestMeta.id !== f.id) {
-          const res = await e.DB.prepare("SELECT * FROM files WHERE id=?").bind(latestMeta.id).all();
-          if (res.results && res.results.length) f = res.results[0];
+      if (matchedRule) {
+        // 根据 sync_rule_id 标记自动对准该规则当前最新实体
+        let latestFile = null;
+        try {
+          latestFile = await e.DB.prepare("SELECT * FROM files WHERE sync_rule_id=? ORDER BY upload_at DESC LIMIT 1").bind(matchedRule.id).first();
+        } catch (_) {}
+        if (!latestFile && matchedRule.lastFiles && matchedRule.lastFiles.length > 0) {
+          const latestMeta = matchedRule.lastFiles[0];
+          latestFile = await e.DB.prepare("SELECT * FROM files WHERE id=?").bind(latestMeta.id).first();
         }
+        if (latestFile && latestFile.id) f = latestFile;
       }
     } else {
       const cfgData = await getSiteConfig(e, true);
       const rules = cfgData.githubSyncRules || [];
       matchedRule = rules.find(r => (r.shareId && r.shareId === rawId) || r.id === rawId || (r.historyIds && r.historyIds.includes(rawId)));
       if (matchedRule) {
-        const activeFile = (matchedRule.lastFiles && matchedRule.lastFiles[0]) || (matchedRule.pendingFiles && matchedRule.pendingFiles[0]);
-        if (activeFile && activeFile.id) {
-          const res = await e.DB.prepare("SELECT * FROM files WHERE id=?").bind(activeFile.id).all();
-          if (res.results && res.results.length) f = res.results[0];
+        // 核心关联：直接根据该规则的标记 sync_rule_id 从数据库捞取最新活跃文件！
+        try {
+          const markedLatest = await e.DB.prepare("SELECT * FROM files WHERE sync_rule_id=? ORDER BY upload_at DESC LIMIT 1").bind(matchedRule.id).first();
+          if (markedLatest && markedLatest.id) {
+            f = markedLatest;
+          }
+        } catch (_) {}
+        if (!f) {
+          const activeFile = (matchedRule.lastFiles && matchedRule.lastFiles[0]) || (matchedRule.pendingFiles && matchedRule.pendingFiles[0]);
+          if (activeFile && activeFile.id) {
+            const res = await e.DB.prepare("SELECT * FROM files WHERE id=?").bind(activeFile.id).all();
+            if (res.results && res.results.length) f = res.results[0];
+          }
         }
       }
     }
@@ -1310,7 +1338,7 @@ export async function onRequest(context) {
               }
               if (!folderUnlockedMap[fKey]) continue;
             }
-            fF.push({ id: f.id, name: f.name, size: f.size, folder: f.folder || '', is_hidden: f.is_hidden, upload_at: f.upload_at });
+            fF.push({ id: f.id, name: f.name, size: f.size, folder: f.folder || '', is_hidden: f.is_hidden, upload_at: f.upload_at, sync_rule_id: f.sync_rule_id || '' });
           }
           return Response.json({
             isAdmin: iA,

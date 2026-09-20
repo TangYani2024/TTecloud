@@ -146,6 +146,7 @@ Object.assign(app, {
         <div style="font-size:12px;color:gray;display:flex;align-items:center;gap:8px;margin-top:2px">
           <span>🔗 8位固定直达: <code style="color:var(--primary);background:rgba(0,0,0,0.05);padding:2px 6px;border-radius:4px;font-family:monospace;font-weight:bold">${this.escapeHTML(shareId)}</code></span>
           <button type="button" class="btn btn-sm btn-outline" style="padding:2px 8px;font-size:11px" onclick="app.copyFixedShareLink('${shareId}')">📋 复制直链</button>
+          <a href="/share/${shareId}" target="_blank" class="btn btn-sm btn-outline" style="padding:2px 8px;font-size:11px;text-decoration:none">🌐 打开分享</a>
         </div>
         ${updateNotice}
         <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;padding-top:8px;border-top:1px solid var(--cd);flex-wrap:wrap;gap:8px">
@@ -165,7 +166,7 @@ Object.assign(app, {
     const url = `${window.location.origin}/share/${shareId}`;
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(url).then(() => {
-        this.toast('📋 已复制 8 位永久固定直达链接！');
+        this.toast('📋 已复制 8 位永久固定直链（已关联追更标记，自动追随最新版）！');
       }).catch(() => {
         prompt('请手动复制固定直链:', url);
       });

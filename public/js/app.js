@@ -686,9 +686,28 @@ const app = {
       ? '<a href="/file/' + f.id + '?dl=1' + pq + '" download="' + sn + '" class="btn btn-primary flex-1" style="text-decoration:none;padding:12px;font-size:14px;min-width:130px" onclick="app.closeModal(\'fM\')"><img class="om-emoji" src="/openmoji/1F4E5.svg" alt="📥"> 网页下载</a>'
       : '<button type="button" class="btn btn-primary flex-1" style="padding:12px;font-size:14px;min-width:130px" data-id="' + f.id + '" onclick="app.smartDownload(this.dataset.id)"><img class="om-emoji" src="/openmoji/1F4E5.svg" alt="📥"> 网页下载</button>';
 
+    // 检查此文件是否被打上了追更专属任务标记 (sync_rule_id) 或关联了追更规则
+    const syncRules = this.githubSyncRules || (window.__CFG__ && window.__CFG__.githubSyncRules) || [];
+    const syncRule = syncRules.find(r => 
+      (f.sync_rule_id && r.id === f.sync_rule_id) || 
+      (r.lastFiles && r.lastFiles.some(lf => lf.id === f.id))
+    );
+    const shareTargetId = (syncRule && syncRule.shareId) ? syncRule.shareId : f.id;
+    let syncBadgeHtml = '';
+    if (syncRule) {
+      syncBadgeHtml = '<div style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.25);padding:9px 12px;border-radius:12px;display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px">' +
+        '<div style="font-size:12px;color:#059669;font-weight:bold;display:flex;align-items:center;gap:6px">' +
+          '<img class="om-emoji" src="/openmoji/1F517.svg" alt="🔗"> ' +
+          '<span>永久追更直达 <code style="font-family:monospace;background:rgba(16,185,129,0.18);padding:2px 6px;border-radius:4px;color:#047857">' + this.escapeHTML(shareTargetId) + '</code></span>' +
+        '</div>' +
+        '<button type="button" class="btn btn-sm btn-outline" style="padding:4px 10px;font-size:11px;font-weight:bold" onclick="app.copyFixedShareLink(\'' + shareTargetId + '\')">📋 复制直链</button>' +
+      '</div>';
+    }
+
     let b = '';
     if (iv) {
-      b += '<div id="primary-actions" style="display:flex;flex-direction:column;gap:10px;width:100%">' +
+      b += (syncBadgeHtml ? syncBadgeHtml : '') +
+           '<div id="primary-actions" style="display:flex;flex-direction:column;gap:10px;width:100%">' +
            '<div class="flex-row" style="width:100%">' +
            '<button class="btn btn-outline flex-1" style="padding:12px" data-id="' + f.id + '" onclick="app.copyImgLink(this.dataset.id);app.closeModal(\'fM\')"><img class="om-emoji" src="/openmoji/1F517.svg" alt="🔗"> 复制直链</button>' +
            '<button class="btn btn-outline flex-1" style="padding:12px" data-id="' + f.id + '" data-n="' + sn + '" onclick="app.copyImgMd(this.dataset.id,this.dataset.n);app.closeModal(\'fM\')"><img class="om-emoji" src="/openmoji/1F4DD.svg" alt="📝"> Markdown</button>' +
@@ -698,7 +717,7 @@ const app = {
            '<a href="/file/' + f.id + '?dl=1' + pq + '" class="btn btn-outline flex-1" target="_blank" style="text-decoration:none;padding:12px;font-size:14px" onclick="app.closeModal(\'fM\')"><img class="om-emoji" src="/openmoji/1F4E5.svg" alt="📥"> 原生</a>' +
            '</div>' +
            '<div class="flex-row" style="width:100%">' +
-           '<a href="/share/' + f.id + ps + '" class="btn btn-outline flex-1" target="_blank" style="text-decoration:none;padding:12px;font-size:14px" onclick="app.closeModal(\'fM\')"><img class="om-emoji" src="/openmoji/1F4E4.svg" alt="📤"> 分享</a>' +
+           '<a href="/share/' + shareTargetId + ps + '" class="btn btn-outline flex-1" target="_blank" style="text-decoration:none;padding:12px;font-size:14px" onclick="app.closeModal(\'fM\')"><img class="om-emoji" src="/openmoji/1F4E4.svg" alt="📤"> 分享</a>' +
            '<button class="btn flex-1" style="padding:12px;background:#10b981" onclick="document.getElementById(\'primary-actions\').style.display=\'none\';document.getElementById(\'bg-options\').style.display=\'flex\'"><img class="om-emoji" src="/openmoji/1F5BC.svg" alt="🖼️"> 设为壁纸</button>' +
            '</div>' +
            '</div>' +
@@ -710,12 +729,13 @@ const app = {
            '<button class="btn btn-outline" style="width:100%;padding:12px" onclick="document.getElementById(\'bg-options\').style.display=\'none\';document.getElementById(\'primary-actions\').style.display=\'flex\'">取消</button>' +
            '</div>';
     } else {
-      b += '<div class="flex-row" style="width:100%">' +
+      b += (syncBadgeHtml ? syncBadgeHtml : '') +
+           '<div class="flex-row" style="width:100%">' +
            fastDlBtn +
            '<a href="/file/' + f.id + '?dl=1' + pq + '" class="btn btn-outline flex-1" target="_blank" style="text-decoration:none;padding:12px;font-size:14px" onclick="app.closeModal(\'fM\')"><img class="om-emoji" src="/openmoji/1F4E5.svg" alt="📥"> 原生下载</a>' +
            '</div>' +
            '<div class="flex-row" style="width:100%">' +
-           '<a href="/share/' + f.id + ps + '" class="btn btn-outline flex-1" target="_blank" style="text-decoration:none;padding:12px;font-size:14px" onclick="app.closeModal(\'fM\')"><img class="om-emoji" src="/openmoji/1F4E4.svg" alt="📤"> 分享</a>' +
+           '<a href="/share/' + shareTargetId + ps + '" class="btn btn-outline flex-1" target="_blank" style="text-decoration:none;padding:12px;font-size:14px" onclick="app.closeModal(\'fM\')"><img class="om-emoji" src="/openmoji/1F4E4.svg" alt="📤"> 分享</a>' +
            '</div>';
     }
 
