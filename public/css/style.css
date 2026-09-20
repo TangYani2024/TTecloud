@@ -34,22 +34,21 @@ body {
 .bg-layer {
   content: "";
   position: fixed;
-  top: -2%;
-  left: -2%;
-  width: 104vw;
-  height: calc(var(--app-height, 100vh) * 1.04);
+  top: -10%;
+  left: -10%;
+  width: 30vw;
+  height: 30vh;
   pointer-events: none;
   z-index: -3;
   background-image: var(--user-bg-url);
   background-size: cover;
   background-position: center;
+  filter: blur(12px) brightness(1.06) saturate(115%);
+  transform: scale(4.2);
+  transform-origin: 0 0;
   opacity: var(--bg-op, 0);
   transition: opacity 0.4s ease;
-  will-change: opacity;
-}
-
-.bg-layer.needs-filter {
-  filter: blur(8px) brightness(1.03);
+  will-change: transform, opacity;
 }
 
 button, input, .card, .folder-card, .file-card, .modal-content, .nav-tab, .upload-box {

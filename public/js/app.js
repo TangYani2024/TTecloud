@@ -243,65 +243,25 @@ const app = {
     }
   },
 
-  bgCanvasCache: {},
-  async getBlurredWallpaper(url) {
-    if (!url) return null;
-    if (this.bgCanvasCache[url]) return this.bgCanvasCache[url];
-
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.onload = () => {
-        try {
-          const targetWidth = 360;
-          const targetHeight = Math.max(1, Math.round(targetWidth * (img.naturalHeight / img.naturalWidth || 9 / 16)));
-          const canvas = document.createElement('canvas');
-          canvas.width = targetWidth;
-          canvas.height = targetHeight;
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            ctx.filter = 'blur(4px) brightness(1.04) saturate(110%)';
-            ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
-            const blurredDataUrl = canvas.toDataURL('image/jpeg', 0.85);
-            this.bgCanvasCache[url] = blurredDataUrl;
-            return resolve({ url: blurredDataUrl, isPrefiltered: true });
-          }
-        } catch (e) {
-          // 跨域受阻时降级使用原图
-        }
-        resolve({ url: url, isPrefiltered: false });
-      };
-      img.onerror = () => resolve({ url: url, isPrefiltered: false });
-      img.src = url;
-    });
-  },
-
-  async applyBg() {
+  applyBg() {
     const isM = window.innerWidth <= 768;
-    const u = isM ? this.settings.bgMobile : this.settings.bgPc;
+    const p = (this.settings.bgPc || '').trim();
+    const m = (this.settings.bgMobile || '').trim();
+    const u = isM ? (m || p) : (p || m);
     const bgEl = document.getElementById('bg-layer') || document.querySelector('.bg-layer');
     if (u) {
+      document.documentElement.style.setProperty('--user-bg-url', 'url("' + u + '")');
       document.documentElement.style.setProperty('--bg-op', '1');
-      const processed = await this.getBlurredWallpaper(u);
-      if (processed) {
-        document.documentElement.style.setProperty('--user-bg-url', 'url("' + processed.url + '")');
-        if (bgEl) {
-          bgEl.style.backgroundImage = 'url("' + processed.url + '")';
-          if (processed.isPrefiltered) {
-            bgEl.classList.remove('needs-filter');
-            bgEl.style.filter = 'none';
-          } else {
-            bgEl.classList.add('needs-filter');
-          }
-        }
+      if (bgEl) {
+        bgEl.style.backgroundImage = 'url("' + u + '")';
+        bgEl.style.opacity = '1';
       }
     } else {
       document.documentElement.style.removeProperty('--user-bg-url');
       document.documentElement.style.setProperty('--bg-op', '0');
       if (bgEl) {
         bgEl.style.backgroundImage = 'none';
-        bgEl.classList.remove('needs-filter');
-        bgEl.style.filter = 'none';
+        bgEl.style.opacity = '0';
       }
     }
   },
