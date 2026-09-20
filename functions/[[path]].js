@@ -447,29 +447,74 @@ export async function onRequest(context) {
     });
   }
 
-  // 4. 分享链接页面 (支持文件ID与追更规则8位固定ID，并在手动分享/访问老UUID时自动升级为8位短ID)
+  // 4. 分享链接页面 (支持文件ID、追更规则8位固定ID与所有历史分享ID)
   if (P.startsWith('/share/')) {
     const rawId = P.split('/')[2];
     let fileObj = null;
+    let matchedRule = null;
     let { results: R } = await e.DB.prepare("SELECT * FROM files WHERE id=?").bind(rawId).all();
     if (R.length) {
       fileObj = R[0];
+      // 检查当前文件是否属于某个追更规则，若该规则已有更新的版本，自动对准最新活跃文件
+      const cfgData = await getSiteConfig(e, false);
+      const rules = cfgData.githubSyncRules || [];
+      matchedRule = rules.find(r => 
+        (r.shareId && r.shareId === rawId) || 
+        r.id === rawId || 
+        (r.historyIds && r.historyIds.includes(rawId)) ||
+        (r.lastFiles && r.lastFiles.some(lf => lf.id === fileObj.id)) ||
+        (fileObj.folder && (r.folder === fileObj.folder || (r.repo && r.repo.includes(fileObj.folder))))
+      );
+      if (matchedRule && matchedRule.lastFiles && matchedRule.lastFiles.length > 0) {
+        const latestMeta = matchedRule.lastFiles[0];
+        if (latestMeta.id !== fileObj.id) {
+          const res = await e.DB.prepare("SELECT * FROM files WHERE id=?").bind(latestMeta.id).all();
+          if (res.results && res.results.length) fileObj = res.results[0];
+        }
+      }
       // 手动访问或分享老文件时：若仍是老 UUID(>8位)，自动替换为8位安全短ID并废除老UUID
       if (fileObj.id && fileObj.id.length > 8) {
+        const oldLongId = fileObj.id;
         const newShortId = generateShortId(8);
         try {
-          await e.DB.prepare("UPDATE files SET id=? WHERE id=?").bind(newShortId, fileObj.id).run();
+          await e.DB.prepare("UPDATE files SET id=? WHERE id=?").bind(newShortId, oldLongId).run();
+          const cfgDataFresh = await getSiteConfig(e, true);
+          let ruleUpdated = false;
+          (cfgDataFresh.githubSyncRules || []).forEach(r => {
+            if (r.lastFiles) {
+              r.lastFiles.forEach(lf => {
+                if (lf.id === oldLongId) {
+                  lf.id = newShortId;
+                  ruleUpdated = true;
+                }
+              });
+            }
+            if (ruleUpdated) {
+              r.historyIds = r.historyIds || [];
+              if (!r.historyIds.includes(oldLongId)) r.historyIds.push(oldLongId);
+            }
+          });
+          if (ruleUpdated) {
+            globalSiteConfig = cfgDataFresh;
+            globalConfigTime = Date.now();
+            await awsS3Fetch(CONFIG.S3_ENDPOINT + '/' + CONFIG.BUCKETS.RESOURCE + '/' + encodeURIComponent('.sys/__site_config__.json'), {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(cfgDataFresh)
+            }, e);
+          }
           const targetUrl = new URL(req.url);
           targetUrl.pathname = '/share/' + newShortId;
           return Response.redirect(targetUrl.toString(), 302);
         } catch (err) {}
       }
     } else {
-      const cfgData = await getSiteConfig(e, false);
+      // 若 D1 中未直接命中 ID，检索是否是规则的 shareId、ruleId 或历史 ID (historyIds)
+      const cfgData = await getSiteConfig(e, true);
       const rules = cfgData.githubSyncRules || [];
-      const rule = rules.find(r => (r.shareId && r.shareId === rawId) || r.id === rawId);
-      if (rule) {
-        const activeFile = (rule.lastFiles && rule.lastFiles[0]) || (rule.pendingFiles && rule.pendingFiles[0]);
+      matchedRule = rules.find(r => (r.shareId && r.shareId === rawId) || r.id === rawId || (r.historyIds && r.historyIds.includes(rawId)));
+      if (matchedRule) {
+        const activeFile = (matchedRule.lastFiles && matchedRule.lastFiles[0]) || (matchedRule.pendingFiles && matchedRule.pendingFiles[0]);
         if (activeFile && activeFile.id) {
           const res = await e.DB.prepare("SELECT * FROM files WHERE id=?").bind(activeFile.id).all();
           if (res.results && res.results.length) fileObj = res.results[0];
@@ -488,10 +533,26 @@ export async function onRequest(context) {
     let { results: R } = await e.DB.prepare("SELECT * FROM files WHERE id=?").bind(rawId).all();
     if (R.length) {
       f = R[0];
-    } else {
       const cfgData = await getSiteConfig(e, false);
       const rules = cfgData.githubSyncRules || [];
-      matchedRule = rules.find(r => (r.shareId && r.shareId === rawId) || r.id === rawId);
+      matchedRule = rules.find(r => 
+        (r.shareId && r.shareId === rawId) || 
+        r.id === rawId || 
+        (r.historyIds && r.historyIds.includes(rawId)) ||
+        (r.lastFiles && r.lastFiles.some(lf => lf.id === f.id)) ||
+        (f.folder && (r.folder === f.folder || (r.repo && r.repo.includes(f.folder))))
+      );
+      if (matchedRule && matchedRule.lastFiles && matchedRule.lastFiles.length > 0) {
+        const latestMeta = matchedRule.lastFiles[0];
+        if (latestMeta.id !== f.id) {
+          const res = await e.DB.prepare("SELECT * FROM files WHERE id=?").bind(latestMeta.id).all();
+          if (res.results && res.results.length) f = res.results[0];
+        }
+      }
+    } else {
+      const cfgData = await getSiteConfig(e, true);
+      const rules = cfgData.githubSyncRules || [];
+      matchedRule = rules.find(r => (r.shareId && r.shareId === rawId) || r.id === rawId || (r.historyIds && r.historyIds.includes(rawId)));
       if (matchedRule) {
         const activeFile = (matchedRule.lastFiles && matchedRule.lastFiles[0]) || (matchedRule.pendingFiles && matchedRule.pendingFiles[0]);
         if (activeFile && activeFile.id) {
@@ -536,10 +597,25 @@ export async function onRequest(context) {
     if (clientNoneMatch) sh['If-None-Match'] = clientNoneMatch;
     if (req.headers.has('If-Modified-Since')) sh['If-Modified-Since'] = req.headers.get('If-Modified-Since');
 
-    const rs = await awsS3Fetch(CONFIG.S3_ENDPOINT + '/' + f.type + '/' + encodeURIComponent(f.b2_path), {
+    let rs = await awsS3Fetch(CONFIG.S3_ENDPOINT + '/' + f.type + '/' + encodeURIComponent(f.b2_path), {
       method: isHead ? 'HEAD' : 'GET',
       headers: sh
     }, e);
+
+    // 容错自愈：若 S3 返回 404 (历史对象已被清理替换)，自动尝试定位该规则的最新实体
+    if (rs.status === 404 && matchedRule && matchedRule.lastFiles && matchedRule.lastFiles.length > 0) {
+      const latestMeta = matchedRule.lastFiles[0];
+      if (latestMeta.b2_path && latestMeta.b2_path !== f.b2_path) {
+        const res = await e.DB.prepare("SELECT * FROM files WHERE id=?").bind(latestMeta.id).all();
+        if (res.results && res.results.length) {
+          f = res.results[0];
+          rs = await awsS3Fetch(CONFIG.S3_ENDPOINT + '/' + f.type + '/' + encodeURIComponent(f.b2_path), {
+            method: isHead ? 'HEAD' : 'GET',
+            headers: sh
+          }, e);
+        }
+      }
+    }
 
     if (rs.status === 304) {
       return new Response(null, {
@@ -777,10 +853,37 @@ export async function onRequest(context) {
           }, e);
           if (!putRs.ok) throw new Error(`写入 B2 存储桶失败: ${await putRs.text()}`);
 
-          const fileId = generateShortId(8);
-          await e.DB.prepare("INSERT INTO files (id,name,b2_path,type,size,folder) VALUES (?,?,?,?,?,?)")
-            .bind(fileId, cleanFileName, newBp, bk, fileSize, targetFolder)
-            .run();
+          // 核心设计：寻找可继承的原有旧文件（保证原分享链接永久固定有效）
+          let matchedOldFile = null;
+          if (rule.lastFiles && rule.lastFiles.length > 0 && rule.lastFiles[0].id) {
+            const r = await e.DB.prepare("SELECT id, name, b2_path, type as bucket FROM files WHERE id=?").bind(rule.lastFiles[0].id).first();
+            if (r) matchedOldFile = r;
+          }
+          if (!matchedOldFile) {
+            const r = await e.DB.prepare("SELECT id, name, b2_path, type as bucket FROM files WHERE (folder=? AND name=?) OR (name=? AND (folder='' OR folder IS NULL OR folder='直链追更' OR folder=?)) ORDER BY upload_at DESC LIMIT 1")
+              .bind(targetFolder, cleanFileName, cleanFileName, targetFolder).first();
+            if (r) matchedOldFile = r;
+          }
+
+          let fileId = '';
+          if (matchedOldFile && matchedOldFile.id) {
+            fileId = matchedOldFile.id;
+            // 原地更新记录，保持原分享链接与 ID 固定！
+            await e.DB.prepare("UPDATE files SET name=?, b2_path=?, size=?, folder=?, upload_at=CURRENT_TIMESTAMP WHERE id=?")
+              .bind(cleanFileName, newBp, fileSize, targetFolder, fileId)
+              .run();
+            // 物理删除旧 S3 实体
+            if (matchedOldFile.b2_path && matchedOldFile.b2_path !== newBp) {
+              try {
+                await awsS3Fetch(CONFIG.S3_ENDPOINT + '/' + (matchedOldFile.bucket || bk) + '/' + encodeURIComponent(matchedOldFile.b2_path), { method: 'DELETE' }, e);
+              } catch (_) {}
+            }
+          } else {
+            fileId = generateShortId(8);
+            await e.DB.prepare("INSERT INTO files (id,name,b2_path,type,size,folder) VALUES (?,?,?,?,?,?)")
+              .bind(fileId, cleanFileName, newBp, bk, fileSize, targetFolder)
+              .run();
+          }
           newFiles.push({ id: fileId, name: cleanFileName, b2_path: newBp, bucket: bk });
         } else {
           // ================== 模式 B：GitHub Release 追更 ==================
@@ -833,7 +936,16 @@ export async function onRequest(context) {
 
           targetFolder = (rule.folder || cleanRepo.split('/')[1] || cleanRepo).trim();
 
-          for (const asset of matchedAssets) {
+          let existingFolderFiles = [];
+          try {
+            const { results } = await e.DB.prepare("SELECT id, name, b2_path, type as bucket FROM files WHERE folder=?").bind(targetFolder).all();
+            if (results) existingFolderFiles = results;
+          } catch (_) {}
+
+          const usedOldIds = new Set();
+
+          for (let i = 0; i < matchedAssets.length; i++) {
+            const asset = matchedAssets[i];
             const fileRes = await fetch(asset.browser_download_url, {
               headers: { 'User-Agent': 'Cloudflare-Worker-TangYani-Drive' },
               redirect: 'follow'
@@ -856,61 +968,99 @@ export async function onRequest(context) {
             }, e);
             if (!putRs.ok) throw new Error(`写入 B2 存储桶失败: ${await putRs.text()}`);
 
-            const fileId = generateShortId(8);
-            await e.DB.prepare("INSERT INTO files (id,name,b2_path,type,size,folder) VALUES (?,?,?,?,?,?)")
-              .bind(fileId, cleanFileName, newBp, bk, asset.size || 0, targetFolder)
-              .run();
+            // 寻找最贴合的原有旧文件进行原地继承
+            let matchedOld = null;
+            if (rule.lastFiles && rule.lastFiles[i] && !usedOldIds.has(rule.lastFiles[i].id)) {
+              matchedOld = rule.lastFiles[i];
+            }
+            if (!matchedOld) {
+              const baseKeyword = cleanFileName.replace(/[0-9._-]/g, '').toLowerCase();
+              matchedOld = existingFolderFiles.find(ef => !usedOldIds.has(ef.id) && (
+                ef.name === cleanFileName || 
+                (baseKeyword && ef.name.toLowerCase().includes(baseKeyword))
+              ));
+            }
+            if (!matchedOld) {
+              matchedOld = existingFolderFiles.find(ef => !usedOldIds.has(ef.id));
+            }
+
+            let fileId = '';
+            if (matchedOld && matchedOld.id) {
+              fileId = matchedOld.id;
+              usedOldIds.add(fileId);
+              // 原地更新 D1 记录，保持原有分享链接固定不变！
+              await e.DB.prepare("UPDATE files SET name=?, b2_path=?, size=?, folder=?, upload_at=CURRENT_TIMESTAMP WHERE id=?")
+                .bind(cleanFileName, newBp, asset.size || 0, targetFolder, fileId)
+                .run();
+              if (matchedOld.b2_path && matchedOld.b2_path !== newBp) {
+                try {
+                  await awsS3Fetch(CONFIG.S3_ENDPOINT + '/' + (matchedOld.bucket || bk) + '/' + encodeURIComponent(matchedOld.b2_path), { method: 'DELETE' }, e);
+                } catch (_) {}
+              }
+            } else {
+              fileId = generateShortId(8);
+              await e.DB.prepare("INSERT INTO files (id,name,b2_path,type,size,folder) VALUES (?,?,?,?,?,?)")
+                .bind(fileId, cleanFileName, newBp, bk, asset.size || 0, targetFolder)
+                .run();
+            }
+
             newFiles.push({ id: fileId, name: cleanFileName, b2_path: newBp, bucket: bk });
           }
         }
 
-        // 追更成功后彻底清理历史同名旧文件及上代记录（物理删除 S3 存储 + D1 数据库记录）
+        // 追更成功后彻底物理大扫除（清理未被复用的多余旧文件和历史孤儿条目）
         rule.shareId = rule.shareId || generateShortId(8);
-        const newFileIds = new Set(newFiles.map(f => f.id));
+        rule.historyIds = rule.historyIds || [];
+        const activeIds = new Set(newFiles.map(f => f.id));
         const filesToDelete = [];
-        const seenIds = new Set(newFileIds);
+        const seenDeleteIds = new Set();
 
-        // 1. 纳入规则记录的历史老文件
-        if (rule.lastFiles && Array.isArray(rule.lastFiles)) {
-          for (const old of rule.lastFiles) {
-            if (old && old.id && !seenIds.has(old.id)) {
-              seenIds.add(old.id);
-              filesToDelete.push(old);
-            }
-          }
-        }
-        if (rule.pendingOldFiles && Array.isArray(rule.pendingOldFiles)) {
-          for (const old of rule.pendingOldFiles) {
-            if (old && old.id && !seenIds.has(old.id)) {
-              seenIds.add(old.id);
-              filesToDelete.push(old);
-            }
+        // 1. 规则历史记录中的老文件（若未被本次复用，全部删除）
+        const pastFiles = [...(rule.lastFiles || []), ...(rule.pendingOldFiles || [])];
+        for (const old of pastFiles) {
+          if (old && old.id && !activeIds.has(old.id) && !seenDeleteIds.has(old.id)) {
+            seenDeleteIds.add(old.id);
+            filesToDelete.push(old);
           }
         }
 
-        // 2. 查同目标目录下、同名的所有旧文件（哪怕之前因为报错残留了多个，全部彻底清理！）
+        // 2. 目标文件夹内所有未被本次活跃使用的旧文件，彻底物理清除！
+        try {
+          const { results: folderOrphans } = await e.DB.prepare("SELECT id, name, b2_path, type as bucket FROM files WHERE folder=?").bind(targetFolder).all();
+          if (folderOrphans && folderOrphans.length > 0) {
+            for (const fo of folderOrphans) {
+              if (fo && fo.id && !activeIds.has(fo.id) && !seenDeleteIds.has(fo.id)) {
+                seenDeleteIds.add(fo.id);
+                filesToDelete.push(fo);
+              }
+            }
+          }
+        } catch (_) {}
+
+        // 3. 针对直链追更或同名文件，跨所有目录清理重名未使用的孤儿文件
         for (const nf of newFiles) {
           try {
-            const { results } = await e.DB.prepare("SELECT id, name, b2_path, type as bucket FROM files WHERE folder=? AND name=?").bind(targetFolder, nf.name).all();
-            if (results && results.length > 0) {
-              for (const r of results) {
-                if (r && r.id && !seenIds.has(r.id)) {
-                  seenIds.add(r.id);
-                  filesToDelete.push(r);
+            const { results: dupFiles } = await e.DB.prepare("SELECT id, name, b2_path, type as bucket FROM files WHERE name=?").bind(nf.name).all();
+            if (dupFiles && dupFiles.length > 0) {
+              for (const df of dupFiles) {
+                if (df && df.id && !activeIds.has(df.id) && !seenDeleteIds.has(df.id)) {
+                  seenDeleteIds.add(df.id);
+                  filesToDelete.push(df);
                 }
               }
             }
-          } catch (err) {}
+          } catch (_) {}
         }
 
-        // 3. 真正执行物理删除：清理 S3 对象存储与 D1 数据库记录！
+        // 4. 执行真正的物理删除，并将删除的 ID 存入 rule.historyIds 供老链接 302/自动兼容
         for (const old of filesToDelete) {
           try {
-            if (old.b2_path) {
+            if (old.b2_path && !newFiles.some(nf => nf.b2_path === old.b2_path)) {
               await awsS3Fetch(CONFIG.S3_ENDPOINT + '/' + (old.bucket || CONFIG.BUCKETS.RESOURCE) + '/' + encodeURIComponent(old.b2_path), { method: 'DELETE' }, e);
             }
             if (old.id) {
               await e.DB.prepare("DELETE FROM files WHERE id=?").bind(old.id).run();
+              if (!rule.historyIds.includes(old.id)) rule.historyIds.push(old.id);
             }
           } catch (err) {}
         }
@@ -943,7 +1093,7 @@ export async function onRequest(context) {
           hasUpdateToActivate: false,
           msg: isFirstSync
             ? `成功同步 ${cleanRepo} (${tagName})，共 ${newFiles.length} 个文件`
-            : `成功更新 ${cleanRepo} (${tagName})，已清理旧版本残留文件！`
+            : `成功更新 ${cleanRepo} (${tagName})，原分享链接已自动升级至最新版，并已彻底清理残留旧文件！`
         }, {
           headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' }
         });
