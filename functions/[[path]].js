@@ -645,6 +645,17 @@ export async function onRequest(context) {
         }
         const isDirectUrl = /^https?:\/\//i.test(rawRepo) && !/^https?:\/\/github\.com\/[^\/]+\/[^\/]+(?:\/)?$/i.test(rawRepo);
 
+        let cleanRepo = '';
+        if (isDirectUrl) {
+          try {
+            cleanRepo = new URL(rawRepo).hostname;
+          } catch (_) {
+            cleanRepo = rawRepo;
+          }
+        } else {
+          cleanRepo = rawRepo.replace(/^https?:\/\/github\.com\//, '').replace(/\/$/, '');
+        }
+
         let tagName = '';
         let targetFolder = '';
         let newFiles = [];
@@ -747,7 +758,6 @@ export async function onRequest(context) {
           newFiles.push({ id: fileId, name: cleanFileName, b2_path: newBp, bucket: bk });
         } else {
           // ================== 模式 B：GitHub Release 追更 ==================
-          const cleanRepo = rawRepo.replace(/^https?:\/\/github\.com\//, '').replace(/\/$/, '');
           if (!cleanRepo || !cleanRepo.includes('/')) return Response.json({ ok: false, error: 'GitHub 仓库格式不正确 (例: owner/repo) 或无效直链' }, { headers: { 'Cache-Control': 'no-store' } });
 
           const ghHeaders = {
