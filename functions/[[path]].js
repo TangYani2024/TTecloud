@@ -41,7 +41,8 @@ function getBgLayer(c) {
     '<style>' +
     'html,body{background-color:transparent!important;}' +
     ':root{--bg-op:1;}' +
-    '.bg-layer{position:fixed!important;top:-10%!important;left:-10%!important;width:30vw!important;height:30vh!important;pointer-events:none!important;z-index:-3!important;background-size:cover!important;background-position:center!important;filter:blur(12px) brightness(1.06) saturate(115%)!important;transform:scale(4.2)!important;transform-origin:0 0!important;opacity:0;transition:opacity 0.4s ease!important;will-change:transform,opacity!important;}' +
+    '.bg-layer{position:fixed!important;top:-5%!important;left:-5%!important;width:55vw!important;height:55vh!important;pointer-events:none!important;z-index:-3!important;background-size:cover!important;background-position:center!important;filter:blur(8px) brightness(1.04) saturate(108%)!important;transform:scale(2.05)!important;transform-origin:0 0!important;opacity:0;transition:opacity 0.4s ease!important;will-change:transform,opacity!important;}' +
+    '@media(max-width:768px){.bg-layer{filter:blur(10px) brightness(1.04) saturate(108%)!important;}}' +
     (pc ? '.bg-layer{background-image:url("' + pc + '");opacity:1!important;}' : '') +
     (mb ? '@media(max-width:768px){.bg-layer{background-image:url("' + mb + '");opacity:1!important;}}' : '') +
     '</style>' +

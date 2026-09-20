@@ -34,21 +34,27 @@ body {
 .bg-layer {
   content: "";
   position: fixed;
-  top: -10%;
-  left: -10%;
-  width: 30vw;
-  height: 30vh;
+  top: -5%;
+  left: -5%;
+  width: 55vw;
+  height: 55vh;
   pointer-events: none;
   z-index: -3;
   background-image: var(--user-bg-url);
   background-size: cover;
   background-position: center;
-  filter: blur(12px) brightness(1.06) saturate(115%);
-  transform: scale(4.2);
+  filter: blur(8px) brightness(1.04) saturate(108%);
+  transform: scale(2.05);
   transform-origin: 0 0;
   opacity: var(--bg-op, 0);
   transition: opacity 0.4s ease;
   will-change: transform, opacity;
+}
+
+@media (max-width: 768px) {
+  .bg-layer {
+    filter: blur(10px) brightness(1.04) saturate(108%);
+  }
 }
 
 button, input, .card, .folder-card, .file-card, .modal-content, .nav-tab, .upload-box {
