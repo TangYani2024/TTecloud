@@ -113,6 +113,17 @@ async function verifyAdminToken(t, e, c) {
   }
 }
 
+function generateShortId(length = 8) {
+  const chars = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const bytes = new Uint8Array(length);
+  crypto.getRandomValues(bytes);
+  let id = '';
+  for (let i = 0; i < length; i++) {
+    id += chars[bytes[i] % 62];
+  }
+  return id;
+}
+
 async function initD1Schema(db) {
   if (!db) return;
   const stmts = [
@@ -436,18 +447,50 @@ export async function onRequest(context) {
     });
   }
 
-  // 4. 分享链接页面
+  // 4. 分享链接页面 (支持文件ID与追更规则8位固定ID)
   if (P.startsWith('/share/')) {
-    const { results: R } = await e.DB.prepare("SELECT * FROM files WHERE id=?").bind(P.split('/')[2]).all();
-    if (!R.length || (R[0].is_hidden === 1 && !iA)) return new Response('Not Found', { status: 404 });
-    return new Response(rSP(R[0], U.origin, U.searchParams.get('pwd') || '', cfg), { headers: { 'Content-Type': 'text/html;charset=UTF-8' } });
+    const rawId = P.split('/')[2];
+    let fileObj = null;
+    let { results: R } = await e.DB.prepare("SELECT * FROM files WHERE id=?").bind(rawId).all();
+    if (R.length) {
+      fileObj = R[0];
+    } else {
+      const cfgData = await getSiteConfig(e, false);
+      const rules = cfgData.githubSyncRules || [];
+      const rule = rules.find(r => (r.shareId && r.shareId === rawId) || r.id === rawId);
+      if (rule) {
+        const activeFile = (rule.lastFiles && rule.lastFiles[0]) || (rule.pendingFiles && rule.pendingFiles[0]);
+        if (activeFile && activeFile.id) {
+          const res = await e.DB.prepare("SELECT * FROM files WHERE id=?").bind(activeFile.id).all();
+          if (res.results && res.results.length) fileObj = res.results[0];
+        }
+      }
+    }
+    if (!fileObj || (fileObj.is_hidden === 1 && !iA)) return new Response('Not Found', { status: 404 });
+    return new Response(rSP(fileObj, U.origin, U.searchParams.get('pwd') || '', cfg), { headers: { 'Content-Type': 'text/html;charset=UTF-8' } });
   }
 
-  // 5. 文件下载与流式传输
-  if (P.startsWith('/file/')) {
-    const { results: R } = await e.DB.prepare("SELECT * FROM files WHERE id=?").bind(P.split('/')[2]).all();
-    if (!R.length) return new Response('404', { status: 404 });
-    const f = R[0];
+  // 5. 文件下载与流式传输 (支持模式2 协商缓存304与极速HEAD检测)
+  if (P.startsWith('/file/') || P.startsWith('/latest/')) {
+    const rawId = P.split('/')[2];
+    let f = null;
+    let matchedRule = null;
+    let { results: R } = await e.DB.prepare("SELECT * FROM files WHERE id=?").bind(rawId).all();
+    if (R.length) {
+      f = R[0];
+    } else {
+      const cfgData = await getSiteConfig(e, false);
+      const rules = cfgData.githubSyncRules || [];
+      matchedRule = rules.find(r => (r.shareId && r.shareId === rawId) || r.id === rawId);
+      if (matchedRule) {
+        const activeFile = (matchedRule.lastFiles && matchedRule.lastFiles[0]) || (matchedRule.pendingFiles && matchedRule.pendingFiles[0]);
+        if (activeFile && activeFile.id) {
+          const res = await e.DB.prepare("SELECT * FROM files WHERE id=?").bind(activeFile.id).all();
+          if (res.results && res.results.length) f = res.results[0];
+        }
+      }
+    }
+    if (!f) return new Response('404', { status: 404 });
     if (f.is_hidden === 1 && !iA) return new Response('403', { status: 403 });
     if (!iA && f.folder) {
       const m = await e.DB.prepare("SELECT password FROM folder_meta WHERE name=?").bind(f.folder).first();
@@ -457,24 +500,60 @@ export async function onRequest(context) {
         if ((!lM || decodeURIComponent(lM[1]) !== m.password) && uP !== m.password) return new Response('401', { status: 401 });
       }
     }
+
+    const isHead = req.method === 'HEAD';
+    const clientNoneMatch = req.headers.get('If-None-Match');
+    const localEtag = `"${f.id}-${f.size}"`;
+
+    // 模式2 优先本地极速协商 (如果客户端提供的指纹匹配Tag或ETag，直接0字节304返回)
+    if (clientNoneMatch && (clientNoneMatch === localEtag || (matchedRule && clientNoneMatch === `"${matchedRule.lastTag}"`))) {
+      return new Response(null, {
+        status: 304,
+        headers: {
+          'ETag': localEtag,
+          'Cache-Control': 'public, max-age=60',
+          'Access-Control-Allow-Origin': '*'
+        }
+      });
+    }
+
     const sh = { 'Accept-Encoding': 'identity' };
     if (req.headers.has('Range')) {
       let r = req.headers.get('Range');
       if (r.includes(',')) r = r.split(',')[0];
       sh['Range'] = r;
     }
-    if (req.headers.has('If-None-Match')) sh['If-None-Match'] = req.headers.get('If-None-Match');
+    if (clientNoneMatch) sh['If-None-Match'] = clientNoneMatch;
     if (req.headers.has('If-Modified-Since')) sh['If-Modified-Since'] = req.headers.get('If-Modified-Since');
-    const rs = await awsS3Fetch(CONFIG.S3_ENDPOINT + '/' + f.type + '/' + encodeURIComponent(f.b2_path), { headers: sh }, e);
-    if (rs.status === 304) return new Response(null, { status: 304, headers: { 'Cache-Control': 'public, max-age=2592000', 'ETag': rs.headers.get('ETag'), 'Access-Control-Allow-Origin': '*' } });
+
+    const rs = await awsS3Fetch(CONFIG.S3_ENDPOINT + '/' + f.type + '/' + encodeURIComponent(f.b2_path), {
+      method: isHead ? 'HEAD' : 'GET',
+      headers: sh
+    }, e);
+
+    if (rs.status === 304) {
+      return new Response(null, {
+        status: 304,
+        headers: {
+          'Cache-Control': 'public, max-age=2592000',
+          'ETag': rs.headers.get('ETag') || localEtag,
+          'Access-Control-Allow-Origin': '*'
+        }
+      });
+    }
+
     const rh = new Headers(rs.headers);
     rh.set('Content-Disposition', (U.searchParams.get('dl') === '1' ? 'attachment' : 'inline') + "; filename*=UTF-8''" + encodeURIComponent(f.name));
     rh.set('Access-Control-Allow-Origin', '*');
-    rh.set('Access-Control-Expose-Headers', 'Content-Range, Accept-Ranges, Content-Length, Content-Disposition');
+    rh.set('Access-Control-Expose-Headers', 'Content-Range, Accept-Ranges, Content-Length, Content-Disposition, ETag, X-Release-Tag');
     rh.set('Access-Control-Allow-Headers', 'Range, If-None-Match, If-Modified-Since, Content-Type');
     if (!rh.has('Accept-Ranges')) rh.set('Accept-Ranges', 'bytes');
+    if (!rh.has('ETag')) rh.set('ETag', localEtag);
+    if (matchedRule && matchedRule.lastTag) rh.set('X-Release-Tag', matchedRule.lastTag);
     rh.delete('Content-Encoding');
     if ([200, 206].includes(rs.status)) rh.set('Cache-Control', 'public, max-age=2592000, no-transform');
+
+    if (isHead) return new Response(null, { status: rs.status, headers: rh });
     return new Response(rs.body, { status: rs.status, headers: rh });
   }
 
@@ -510,8 +589,12 @@ export async function onRequest(context) {
         const bp = '.sys/__site_config__.json';
         const cfgData = await getSiteConfig(e, true);
         if (req.method === 'GET') {
+          const rules = (cfgData.githubSyncRules || []).map(r => {
+            if (!r.shareId) r.shareId = generateShortId(8);
+            return r;
+          });
           return Response.json({
-            rules: cfgData.githubSyncRules || [],
+            rules,
             hasToken: !!(e.GITHUB_TOKEN || e.GH_TOKEN)
           }, {
             headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' }
@@ -519,7 +602,10 @@ export async function onRequest(context) {
         }
         if (req.method === 'POST') {
           const { rules } = await req.json();
-          cfgData.githubSyncRules = rules || [];
+          cfgData.githubSyncRules = (rules || []).map(r => ({
+            ...r,
+            shareId: r.shareId || generateShortId(8)
+          }));
           globalSiteConfig = cfgData;
           globalConfigTime = Date.now();
           const rs = await awsS3Fetch(CONFIG.S3_ENDPOINT + '/' + CONFIG.BUCKETS.RESOURCE + '/' + encodeURIComponent(bp), {
@@ -629,16 +715,18 @@ export async function onRequest(context) {
           }, e);
           if (!putRs.ok) throw new Error(`写入 B2 存储桶失败: ${await putRs.text()}`);
 
-          const fileId = crypto.randomUUID();
+          const fileId = generateShortId(8);
           await e.DB.prepare("INSERT INTO files (id,name,b2_path,type,size,folder) VALUES (?,?,?,?,?,?)")
             .bind(fileId, cleanFileName, newBp, bk, asset.size || 0, targetFolder)
             .run();
           newFiles.push({ id: fileId, name: cleanFileName, b2_path: newBp, bucket: bk });
         }
 
-        // 追更成功后清理旧版本文件（同时清理 B2 存储与 D1 数据库记录）
-        // 1. 纳入原规则中记录的历史文件
-        // 2. 纳入 targetFolder 下所有同名旧文件（防止同名文件覆盖导致重复或残留）
+        // 追更成功后文件生命周期管理：
+        // 1. 若旧版本已有分享，保持旧链接可用（不立即删除旧版本存储与记录），暂存至 pendingOldFiles
+        // 2. 将新文件暂存至 pendingFiles，等待管理员重新分享/确认激活
+        // 3. 当管理员重新分享或激活新版本时，再替代旧版本并彻底清理原旧文件
+        rule.shareId = rule.shareId || generateShortId(8);
         const newFileIds = new Set(newFiles.map(f => f.id));
         const filesToDelete = [];
         const seenIds = new Set(newFileIds);
@@ -666,20 +754,23 @@ export async function onRequest(context) {
           } catch (err) {}
         }
 
-        for (const old of filesToDelete) {
-          try {
-            if (old.b2_path) {
-              await awsS3Fetch(CONFIG.S3_ENDPOINT + '/' + (old.bucket || CONFIG.BUCKETS.RESOURCE) + '/' + encodeURIComponent(old.b2_path), { method: 'DELETE' }, e);
-            }
-            if (old.id) {
-              await e.DB.prepare("DELETE FROM files WHERE id=?").bind(old.id).run();
-            }
-          } catch (err) {}
+        const isFirstSync = !rule.lastFiles || rule.lastFiles.length === 0;
+
+        if (isFirstSync) {
+          // 首次同步直接激活生效
+          rule.lastFiles = newFiles;
+          rule.pendingFiles = [];
+          rule.pendingOldFiles = [];
+          rule.hasUpdateToActivate = false;
+        } else {
+          // 非首次同步：暂留旧版本供未重新分享的老用户继续访问，新版本等待激活替代
+          rule.pendingFiles = newFiles;
+          rule.pendingOldFiles = filesToDelete;
+          rule.hasUpdateToActivate = true;
         }
 
         rule.lastTag = tagName;
         rule.lastUpdatedAt = timeStr;
-        rule.lastFiles = newFiles;
 
         globalSiteConfig = cfgData;
         globalConfigTime = Date.now();
@@ -696,10 +787,62 @@ export async function onRequest(context) {
           tag: tagName,
           time: timeStr,
           files: newFiles.map(f => f.name),
-          msg: `成功更新 ${cleanRepo} (${tagName})，共同步 ${newFiles.length} 个文件至 [${targetFolder}]，旧版本已清理`
+          shareId: rule.shareId,
+          hasUpdateToActivate: rule.hasUpdateToActivate,
+          msg: isFirstSync
+            ? `成功同步 ${cleanRepo} (${tagName})，共 ${newFiles.length} 个文件`
+            : `成功拉取 ${cleanRepo} (${tagName}) 新版本！旧版本分享链接仍可用，待您点击“激活并替代”后正式交接。`
         }, {
           headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' }
         });
+      }
+
+      if (P === '/api/admin/github/activate' && req.method === 'POST') {
+        const bp = '.sys/__site_config__.json';
+        const { ruleId } = await req.json();
+        const cfgData = await getSiteConfig(e, true);
+        const rules = cfgData.githubSyncRules || [];
+        const rule = rules.find(r => r.id === ruleId);
+        if (!rule) return Response.json({ ok: false, error: '未找到该追更任务' }, { headers: { 'Cache-Control': 'no-store' } });
+
+        // 执行替代：彻底清理上一代旧版本（S3与D1记录），让原旧链接不可用
+        const filesToClean = rule.pendingOldFiles || [];
+        for (const old of filesToClean) {
+          try {
+            if (old.b2_path) {
+              await awsS3Fetch(CONFIG.S3_ENDPOINT + '/' + (old.bucket || CONFIG.BUCKETS.RESOURCE) + '/' + encodeURIComponent(old.b2_path), { method: 'DELETE' }, e);
+            }
+            if (old.id) {
+              await e.DB.prepare("DELETE FROM files WHERE id=?").bind(old.id).run();
+            }
+          } catch (err) {}
+        }
+
+        // 新版本正式替代旧版本
+        if (rule.pendingFiles && rule.pendingFiles.length > 0) {
+          rule.lastFiles = rule.pendingFiles;
+        }
+        rule.pendingFiles = [];
+        rule.pendingOldFiles = [];
+        rule.hasUpdateToActivate = false;
+        rule.shareId = rule.shareId || generateShortId(8);
+
+        globalSiteConfig = cfgData;
+        globalConfigTime = Date.now();
+        globalLastSizeCalcTime = 0;
+        await awsS3Fetch(CONFIG.S3_ENDPOINT + '/' + CONFIG.BUCKETS.RESOURCE + '/' + encodeURIComponent(bp), {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(cfgData)
+        }, e);
+
+        return Response.json({
+          ok: true,
+          msg: '已激活新版本分享，旧版本链接已废弃清理',
+          activeFiles: rule.lastFiles,
+          shareId: rule.shareId,
+          tag: rule.lastTag
+        }, { headers: { 'Cache-Control': 'no-store' } });
       }
 
       if (P === '/api/data' && req.method === 'GET') {
@@ -910,7 +1053,7 @@ export async function onRequest(context) {
               if (o.key.startsWith('.sys/') || o.key.includes('__site_config__')) continue;
               if (!dK.has(o.key)) {
                 const fn = o.key.split('_').slice(1).join('_') || o.key;
-                b.push(e.DB.prepare("INSERT INTO files (id,name,b2_path,type,size,folder) VALUES (?,?,?,?,?,?)").bind(crypto.randomUUID(), fn, o.key, bk, o.size, 'B2直传同步'));
+                b.push(e.DB.prepare("INSERT INTO files (id,name,b2_path,type,size,folder) VALUES (?,?,?,?,?,?)").bind(generateShortId(8), fn, o.key, bk, o.size, 'B2直传同步'));
                 dc++;
               }
             }
@@ -960,7 +1103,7 @@ export async function onRequest(context) {
           body: req.body
         }, e);
         if (!rs.ok) throw new Error(formatS3Error(await rs.text(), rs.status));
-        await e.DB.prepare("INSERT INTO files (id,name,b2_path,type,size,folder) VALUES (?,?,?,?,?,?)").bind(crypto.randomUUID(), fn, bp, bk, req.headers.get('content-length') || 0, decodeURIComponent(req.headers.get('x-folder'))).run();
+        await e.DB.prepare("INSERT INTO files (id,name,b2_path,type,size,folder) VALUES (?,?,?,?,?,?)").bind(generateShortId(8), fn, bp, bk, req.headers.get('content-length') || 0, decodeURIComponent(req.headers.get('x-folder'))).run();
         globalLastSizeCalcTime = 0;
         return Response.json({ ok: true });
       }
@@ -1012,7 +1155,7 @@ export async function onRequest(context) {
         const tp = d.type || 'resource', bk = (tp === 'image' && HAS_IMAGE) ? CONFIG.BUCKETS.IMAGE : CONFIG.BUCKETS.RESOURCE;
         const rs = await awsS3Fetch(CONFIG.S3_ENDPOINT + '/' + bk + '/' + encodeURIComponent(d.b2_path) + '?uploadId=' + d.fileId, { method: 'POST', body: xml }, e);
         if (!rs.ok) throw new Error(formatS3Error(await rs.text(), rs.status));
-        await e.DB.prepare("INSERT INTO files (id,name,b2_path,type,size,folder) VALUES (?,?,?,?,?,?)").bind(crypto.randomUUID(), d.name, d.b2_path, bk, d.size, d.folder).run();
+        await e.DB.prepare("INSERT INTO files (id,name,b2_path,type,size,folder) VALUES (?,?,?,?,?,?)").bind(generateShortId(8), d.name, d.b2_path, bk, d.size, d.folder).run();
         if (d.fileHash) await e.DB.prepare("DELETE FROM upload_sessions WHERE file_hash=?").bind(d.fileHash).run();
         globalLastSizeCalcTime = 0;
         return Response.json({ ok: true });

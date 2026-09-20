@@ -1,4 +1,4 @@
-﻿Object.assign(app, {
+Object.assign(app, {
   githubSyncRules: [],
 
   githubTab: 'list',
@@ -107,6 +107,20 @@
       let incBadges = inc ? inc.split(/[,，\s]+/).filter(Boolean).map(w => `<span class="gh-badge gh-badge-inc">+ ${this.escapeHTML(w)}</span>`).join(' ') : '<span style="color:gray;font-size:11px">全部</span>';
       let excBadges = exc ? exc.split(/[,，\s]+/).filter(Boolean).map(w => `<span class="gh-badge gh-badge-exc">- ${this.escapeHTML(w)}</span>`).join(' ') : '';
 
+      const shareId = rule.shareId || rule.id;
+      const fixedUrl = `${window.location.origin}/share/${shareId}`;
+
+      let updateNotice = '';
+      if (rule.hasUpdateToActivate) {
+        updateNotice = `<div style="background:rgba(245,158,11,0.12);border:1px dashed #f59e0b;padding:8px 12px;border-radius:8px;margin-top:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+          <div style="font-size:12px;color:#d97706;font-weight:bold;display:flex;align-items:center;gap:4px">
+            <span>🟡 新版本就绪</span>
+            <span style="color:gray;font-weight:normal">(旧版本分享链接仍可用)</span>
+          </div>
+          <button type="button" class="btn btn-sm btn-primary" style="padding:4px 12px;font-size:12px;background:#f59e0b;border:none;font-weight:bold" onclick="app.activateGithubUpdate('${rule.id}')">✨ 激活新版本 (替代旧分享)</button>
+        </div>`;
+      }
+
       h += `<div class="gh-rule-card" id="gh-card-${rule.id}">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
           <div style="font-weight:bold;font-size:15px;word-break:break-all">
@@ -123,7 +137,12 @@
           <span>包含: ${incBadges}</span>
           ${excBadges ? `<span>•</span><span>排除: ${excBadges}</span>` : ''}
         </div>
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;padding-top:8px;border-top:1px solid var(--cd);flex-wrap:wrap;gap:8px">
+        <div style="font-size:12px;color:gray;display:flex;align-items:center;gap:8px;margin-top:2px">
+          <span>🔗 8位固定直达: <code style="color:var(--primary);background:rgba(0,0,0,0.05);padding:2px 6px;border-radius:4px;font-family:monospace;font-weight:bold">${this.escapeHTML(shareId)}</code></span>
+          <button type="button" class="btn btn-sm btn-outline" style="padding:2px 8px;font-size:11px" onclick="app.copyFixedShareLink('${shareId}')">📋 复制直链</button>
+        </div>
+        ${updateNotice}
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;padding-top:8px;border-top:1px solid var(--cd);flex-wrap:wrap;gap:8px">
           <span class="gh-badge-time">🕒 更新时间: ${this.escapeHTML(lastTime)}</span>
           <div style="display:flex;gap:6px">
             <button class="btn btn-sm btn-outline" style="padding:4px 10px;font-size:12px" onclick="app.editGithubRule('${rule.id}')">✏️ 编辑</button>
@@ -134,6 +153,40 @@
       </div>`;
     });
     listEl.innerHTML = h;
+  },
+
+  copyFixedShareLink(shareId) {
+    const url = `${window.location.origin}/share/${shareId}`;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(url).then(() => {
+        this.toast('📋 已复制 8 位永久固定直达链接！');
+      }).catch(() => {
+        prompt('请手动复制固定直链:', url);
+      });
+    } else {
+      prompt('请手动复制固定直链:', url);
+    }
+  },
+
+  async activateGithubUpdate(ruleId) {
+    if (!confirm('确认激活新版本并替代旧分享？\n此操作将生成新版分享，同时彻底废弃并清理上一代旧版本文件。')) return;
+    try {
+      const res = await fetch('/api/admin/github/activate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ruleId })
+      });
+      const data = await res.json();
+      if (data.ok) {
+        this.toast('✨ 新版本已激活！旧分享链接已失效');
+        await this.loadGithubRules();
+        if (typeof this.loadData === 'function') this.loadData();
+      } else {
+        alert(data.error || '激活失败');
+      }
+    } catch (e) {
+      alert('网络请求失败');
+    }
   },
 
   resetGithubForm() {
@@ -176,10 +229,20 @@
       const idx = rules.findIndex(r => r.id === ruleId);
       if (idx !== -1) {
         rules[idx] = { ...rules[idx], repo, folder, include, exclude };
+        if (!rules[idx].shareId) {
+          const chars = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+          let s = '';
+          for (let i = 0; i < 8; i++) s += chars.charAt(Math.floor(Math.random() * chars.length));
+          rules[idx].shareId = s;
+        }
       }
     } else {
+      const chars = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+      let shortId = '';
+      for (let i = 0; i < 8; i++) shortId += chars.charAt(Math.floor(Math.random() * chars.length));
       rules.push({
         id: 'gh_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+        shareId: shortId,
         repo,
         folder,
         include,
