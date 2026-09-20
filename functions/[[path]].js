@@ -135,11 +135,13 @@ async function initD1Schema(db) {
       size INTEGER NOT NULL DEFAULT 0,
       folder TEXT DEFAULT '',
       is_hidden INTEGER DEFAULT 0,
-      upload_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      upload_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      sync_rule_id TEXT DEFAULT ''
     )`,
     `CREATE INDEX IF NOT EXISTS idx_files_type ON files(type)`,
     `CREATE INDEX IF NOT EXISTS idx_files_folder ON files(folder)`,
     `CREATE INDEX IF NOT EXISTS idx_files_upload_at ON files(upload_at)`,
+    `CREATE INDEX IF NOT EXISTS idx_files_sync_rule_id ON files(sync_rule_id)`,
     `CREATE TABLE IF NOT EXISTS folder_meta (
       name TEXT PRIMARY KEY,
       password TEXT NOT NULL
@@ -153,7 +155,12 @@ async function initD1Schema(db) {
       uploaded_parts TEXT DEFAULT '[]'
     )`
   ];
-  await db.batch(stmts.map(s => db.prepare(s)));
+  try {
+    await db.batch(stmts.map(s => db.prepare(s)));
+  } catch (_) {}
+  try {
+    await db.prepare("ALTER TABLE files ADD COLUMN sync_rule_id TEXT DEFAULT ''").run();
+  } catch (_) {}
 }
 
 function formatS3Error(txt, status) {
@@ -675,10 +682,44 @@ export async function onRequest(context) {
         const bp = '.sys/__site_config__.json';
         const cfgData = await getSiteConfig(e, true);
         if (req.method === 'GET') {
+          let configNeedsSave = false;
           const rules = (cfgData.githubSyncRules || []).map(r => {
-            if (!r.shareId) r.shareId = generateShortId(8);
+            if (!r.shareId) { r.shareId = generateShortId(8); configNeedsSave = true; }
             return r;
           });
+          // 死链检测与自愈：检查各规则记录的文件是否依然存在于 D1 数据库中，若已不存在则自动清理死链并重置
+          if (e.DB) {
+            for (const r of rules) {
+              if (r.lastFiles && r.lastFiles.length > 0) {
+                const ids = r.lastFiles.map(f => f.id).filter(Boolean);
+                if (ids.length > 0) {
+                  try {
+                    const { results: existingRows } = await e.DB.prepare(`SELECT id FROM files WHERE id IN (${ids.map(() => '?').join(',')})`).bind(...ids).all();
+                    const existingSet = new Set((existingRows || []).map(row => row.id));
+                    const validFiles = r.lastFiles.filter(f => existingSet.has(f.id));
+                    if (validFiles.length !== r.lastFiles.length) {
+                      r.lastFiles = validFiles;
+                      if (validFiles.length === 0) {
+                        r.lastTag = '';
+                        r.pendingOldFiles = [];
+                        r.pendingFiles = [];
+                      }
+                      configNeedsSave = true;
+                    }
+                  } catch (_) {}
+                }
+              }
+            }
+          }
+          if (configNeedsSave) {
+            globalSiteConfig = cfgData;
+            globalConfigTime = Date.now();
+            await awsS3Fetch(CONFIG.S3_ENDPOINT + '/' + CONFIG.BUCKETS.RESOURCE + '/' + encodeURIComponent(bp), {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(cfgData)
+            }, e).catch(() => {});
+          }
           return Response.json({
             rules,
             hasToken: !!(e.GITHUB_TOKEN || e.GH_TOKEN)
@@ -708,10 +749,28 @@ export async function onRequest(context) {
       if (P === '/api/admin/github/sync' && req.method === 'POST') {
         const bp = '.sys/__site_config__.json';
         const { ruleId, force } = await req.json();
+        if (e.DB) await initD1Schema(e.DB);
         const cfgData = await getSiteConfig(e, true);
         const rules = cfgData.githubSyncRules || [];
         const rule = rules.find(r => r.id === ruleId);
         if (!rule) return Response.json({ ok: false, error: '未找到该追更任务' }, { headers: { 'Cache-Control': 'no-store' } });
+
+        // 死链自愈检查：检测此前追更记录的文件在 D1 中是否依然存在，若已被用户本地删除则重置追更记录
+        if (rule.lastFiles && rule.lastFiles.length > 0 && e.DB) {
+          const checkIds = rule.lastFiles.map(f => f.id).filter(Boolean);
+          if (checkIds.length > 0) {
+            try {
+              const { results: existingRows } = await e.DB.prepare(`SELECT id FROM files WHERE id IN (${checkIds.map(() => '?').join(',')})`).bind(...checkIds).all();
+              const existingSet = new Set((existingRows || []).map(r => r.id));
+              rule.lastFiles = rule.lastFiles.filter(f => existingSet.has(f.id));
+              if (rule.lastFiles.length === 0) {
+                rule.lastTag = '';
+                rule.pendingOldFiles = [];
+                rule.pendingFiles = [];
+              }
+            } catch (_) {}
+          }
+        }
 
         let rawRepo = (rule.repo || '').trim();
         // 自动容错修复缺失冒号或斜杠的协议（如 https//lsposed.zip -> https://lsposed.zip）
@@ -778,8 +837,8 @@ export async function onRequest(context) {
             tagName = 'size-' + cl;
           }
 
-          // 如果探测阶段拿到了明确的 ETag/大小/修改时间，且与上一次记录的一致，秒回跳过更新
-          if (!force && tagName && rule.lastTag && rule.lastTag === tagName) {
+          // 如果探测阶段拿到了明确的 ETag/大小/修改时间，且与上一次记录的一致，且本地确实有文件，秒回跳过更新
+          if (!force && tagName && rule.lastTag && rule.lastTag === tagName && rule.lastFiles && rule.lastFiles.length > 0) {
             return Response.json({ ok: true, skipped: true, tag: tagName, time: rule.lastUpdatedAt || timeStr, msg: `已是最新版本 (${tagName})，无需更新` }, { headers: { 'Cache-Control': 'no-store' } });
           }
 
@@ -853,24 +912,23 @@ export async function onRequest(context) {
           }, e);
           if (!putRs.ok) throw new Error(`写入 B2 存储桶失败: ${await putRs.text()}`);
 
-          // 核心设计：寻找可继承的原有旧文件（保证原分享链接永久固定有效）
+          // 核心标记设计：寻找打上了本任务标记 (sync_rule_id = rule.id) 的已有文件进行原地继承
           let matchedOldFile = null;
-          if (rule.lastFiles && rule.lastFiles.length > 0 && rule.lastFiles[0].id) {
-            const r = await e.DB.prepare("SELECT id, name, b2_path, type as bucket FROM files WHERE id=?").bind(rule.lastFiles[0].id).first();
-            if (r) matchedOldFile = r;
-          }
-          if (!matchedOldFile) {
-            const r = await e.DB.prepare("SELECT id, name, b2_path, type as bucket FROM files WHERE (folder=? AND name=?) OR (name=? AND (folder='' OR folder IS NULL OR folder='直链追更' OR folder=?)) ORDER BY upload_at DESC LIMIT 1")
-              .bind(targetFolder, cleanFileName, cleanFileName, targetFolder).first();
-            if (r) matchedOldFile = r;
+          try {
+            matchedOldFile = await e.DB.prepare("SELECT id, name, b2_path, type as bucket FROM files WHERE sync_rule_id=? LIMIT 1").bind(rule.id).first();
+          } catch (_) {}
+          if (!matchedOldFile && rule.lastFiles && rule.lastFiles.length > 0 && rule.lastFiles[0].id) {
+            try {
+              matchedOldFile = await e.DB.prepare("SELECT id, name, b2_path, type as bucket FROM files WHERE id=?").bind(rule.lastFiles[0].id).first();
+            } catch (_) {}
           }
 
           let fileId = '';
           if (matchedOldFile && matchedOldFile.id) {
             fileId = matchedOldFile.id;
-            // 原地更新记录，保持原分享链接与 ID 固定！
-            await e.DB.prepare("UPDATE files SET name=?, b2_path=?, size=?, folder=?, upload_at=CURRENT_TIMESTAMP WHERE id=?")
-              .bind(cleanFileName, newBp, fileSize, targetFolder, fileId)
+            // 原地更新记录并标记 sync_rule_id，保持原分享链接与 ID 固定！
+            await e.DB.prepare("UPDATE files SET name=?, b2_path=?, size=?, folder=?, upload_at=CURRENT_TIMESTAMP, sync_rule_id=? WHERE id=?")
+              .bind(cleanFileName, newBp, fileSize, targetFolder, rule.id, fileId)
               .run();
             // 物理删除旧 S3 实体
             if (matchedOldFile.b2_path && matchedOldFile.b2_path !== newBp) {
@@ -880,8 +938,8 @@ export async function onRequest(context) {
             }
           } else {
             fileId = generateShortId(8);
-            await e.DB.prepare("INSERT INTO files (id,name,b2_path,type,size,folder) VALUES (?,?,?,?,?,?)")
-              .bind(fileId, cleanFileName, newBp, bk, fileSize, targetFolder)
+            await e.DB.prepare("INSERT INTO files (id,name,b2_path,type,size,folder,sync_rule_id) VALUES (?,?,?,?,?,?,?)")
+              .bind(fileId, cleanFileName, newBp, bk, fileSize, targetFolder, rule.id)
               .run();
           }
           newFiles.push({ id: fileId, name: cleanFileName, b2_path: newBp, bucket: bk });
@@ -930,16 +988,17 @@ export async function onRequest(context) {
             return Response.json({ ok: true, skipped: true, tag: tagName, time: rule.lastUpdatedAt || timeStr, msg: `未找到符合正负词过滤的文件 (最新 Release 版本: ${tagName})` }, { headers: { 'Cache-Control': 'no-store' } });
           }
 
-          if (!force && tagName && rule.lastTag && rule.lastTag === tagName) {
+          if (!force && tagName && rule.lastTag && rule.lastTag === tagName && rule.lastFiles && rule.lastFiles.length > 0) {
             return Response.json({ ok: true, skipped: true, tag: tagName, time: rule.lastUpdatedAt || timeStr, msg: `已是最新版本 (${tagName})，无需更新` }, { headers: { 'Cache-Control': 'no-store' } });
           }
 
           targetFolder = (rule.folder || cleanRepo.split('/')[1] || cleanRepo).trim();
 
-          let existingFolderFiles = [];
+          // 仅查询打上了本任务标记 (sync_rule_id = rule.id) 的已有文件进行继承匹配
+          let existingRuleFiles = [];
           try {
-            const { results } = await e.DB.prepare("SELECT id, name, b2_path, type as bucket FROM files WHERE folder=?").bind(targetFolder).all();
-            if (results) existingFolderFiles = results;
+            const { results } = await e.DB.prepare("SELECT id, name, b2_path, type as bucket FROM files WHERE sync_rule_id=?").bind(rule.id).all();
+            if (results) existingRuleFiles = results;
           } catch (_) {}
 
           const usedOldIds = new Set();
@@ -968,21 +1027,19 @@ export async function onRequest(context) {
             }, e);
             if (!putRs.ok) throw new Error(`写入 B2 存储桶失败: ${await putRs.text()}`);
 
-            // 寻找最贴合的原有旧文件进行原地继承（严格限定属于本仓库资产，绝不挪用无关文件）
+            // 寻找最贴合的原有旧文件进行原地继承（仅在打上本规则标记的文件中挑选）
             let matchedOld = null;
             if (rule.lastFiles && rule.lastFiles[i] && !usedOldIds.has(rule.lastFiles[i].id)) {
-              matchedOld = rule.lastFiles[i];
+              matchedOld = existingRuleFiles.find(ef => ef.id === rule.lastFiles[i].id);
             }
             if (!matchedOld) {
-              const repoKeyword = (cleanRepo.split('/')[1] || cleanRepo).toLowerCase();
               const baseKeyword = cleanFileName.replace(/[0-9._-]/g, '').toLowerCase();
-              matchedOld = existingFolderFiles.find(ef => {
+              matchedOld = existingRuleFiles.find(ef => {
                 if (usedOldIds.has(ef.id)) return false;
                 const efn = (ef.name || '').toLowerCase();
                 const isSameName = ef.name === cleanFileName;
                 const isSameAsset = baseKeyword.length >= 3 && efn.includes(baseKeyword);
-                const isBelongToRepo = repoKeyword && efn.includes(repoKeyword);
-                return isSameName || (isSameAsset && isBelongToRepo);
+                return isSameName || isSameAsset;
               });
             }
 
@@ -990,9 +1047,9 @@ export async function onRequest(context) {
             if (matchedOld && matchedOld.id) {
               fileId = matchedOld.id;
               usedOldIds.add(fileId);
-              // 原地更新 D1 记录，保持原有分享链接固定不变！
-              await e.DB.prepare("UPDATE files SET name=?, b2_path=?, size=?, folder=?, upload_at=CURRENT_TIMESTAMP WHERE id=?")
-                .bind(cleanFileName, newBp, asset.size || 0, targetFolder, fileId)
+              // 原地更新 D1 记录并标记 sync_rule_id，保持原有分享链接固定不变！
+              await e.DB.prepare("UPDATE files SET name=?, b2_path=?, size=?, folder=?, upload_at=CURRENT_TIMESTAMP, sync_rule_id=? WHERE id=?")
+                .bind(cleanFileName, newBp, asset.size || 0, targetFolder, rule.id, fileId)
                 .run();
               if (matchedOld.b2_path && matchedOld.b2_path !== newBp) {
                 try {
@@ -1001,8 +1058,8 @@ export async function onRequest(context) {
               }
             } else {
               fileId = generateShortId(8);
-              await e.DB.prepare("INSERT INTO files (id,name,b2_path,type,size,folder) VALUES (?,?,?,?,?,?)")
-                .bind(fileId, cleanFileName, newBp, bk, asset.size || 0, targetFolder)
+              await e.DB.prepare("INSERT INTO files (id,name,b2_path,type,size,folder,sync_rule_id) VALUES (?,?,?,?,?,?,?)")
+                .bind(fileId, cleanFileName, newBp, bk, asset.size || 0, targetFolder, rule.id)
                 .run();
             }
 
@@ -1010,14 +1067,27 @@ export async function onRequest(context) {
           }
         }
 
-        // 追更成功后，精准清理属于本任务的历史旧版本残留（绝不误伤同目录下的其他无关文件！）
+        // 追更成功后，精准清理属于本任务标记 (sync_rule_id = rule.id) 的历史旧版本（绝不误伤任何其他文件！）
         rule.shareId = rule.shareId || generateShortId(8);
         rule.historyIds = rule.historyIds || [];
         const activeIds = new Set(newFiles.map(f => f.id));
         const filesToDelete = [];
         const seenDeleteIds = new Set();
 
-        // 1. 规则历史记录中的老文件（若未被本次复用，全部删除）
+        // 1. 唯一且精准的判定标准：仅查找数据库中标记了本规则 ID (sync_rule_id = rule.id) 的旧文件！
+        try {
+          const { results: markedFiles } = await e.DB.prepare("SELECT id, name, b2_path, type as bucket FROM files WHERE sync_rule_id=?").bind(rule.id).all();
+          if (markedFiles && markedFiles.length > 0) {
+            for (const mf of markedFiles) {
+              if (mf && mf.id && !activeIds.has(mf.id) && !seenDeleteIds.has(mf.id)) {
+                seenDeleteIds.add(mf.id);
+                filesToDelete.push(mf);
+              }
+            }
+          }
+        } catch (_) {}
+
+        // 2. 规则此前历史暂存队列中的老文件
         const pastFiles = [...(rule.lastFiles || []), ...(rule.pendingOldFiles || [])];
         for (const old of pastFiles) {
           if (old && old.id && !activeIds.has(old.id) && !seenDeleteIds.has(old.id)) {
@@ -1026,42 +1096,7 @@ export async function onRequest(context) {
           }
         }
 
-        // 2. 针对直链追更：仅清理同名旧文件（例如多次下载残留的历史重名文件，绝不碰同目录其他文件！）
-        if (isDirectUrl) {
-          for (const nf of newFiles) {
-            try {
-              const { results: dupFiles } = await e.DB.prepare("SELECT id, name, b2_path, type as bucket FROM files WHERE folder=? AND name=?").bind(targetFolder, nf.name).all();
-              if (dupFiles && dupFiles.length > 0) {
-                for (const df of dupFiles) {
-                  if (df && df.id && !activeIds.has(df.id) && !seenDeleteIds.has(df.id)) {
-                    seenDeleteIds.add(df.id);
-                    filesToDelete.push(df);
-                  }
-                }
-              }
-            } catch (_) {}
-          }
-        } else {
-          // 3. 针对 GitHub 追更：仅清理属于该仓库特征的旧版本文件（按仓库名或包含词识别，绝不误伤其他文件）
-          const repoKeyword = (cleanRepo.split('/')[1] || cleanRepo).toLowerCase();
-          try {
-            const { results: folderFiles } = await e.DB.prepare("SELECT id, name, b2_path, type as bucket FROM files WHERE folder=?").bind(targetFolder).all();
-            if (folderFiles && folderFiles.length > 0) {
-              for (const ff of folderFiles) {
-                if (!ff || !ff.id || activeIds.has(ff.id) || seenDeleteIds.has(ff.id)) continue;
-                const fn = (ff.name || '').toLowerCase();
-                const isBelongToRule = (repoKeyword && fn.includes(repoKeyword)) || 
-                  (incWords.length > 0 && incWords.some(w => fn.includes(w)));
-                if (isBelongToRule) {
-                  seenDeleteIds.add(ff.id);
-                  filesToDelete.push(ff);
-                }
-              }
-            }
-          } catch (_) {}
-        }
-
-        // 4. 执行真正的物理删除，并将删除的 ID 存入 rule.historyIds 供老链接 302/自动兼容
+        // 3. 执行真正的物理删除，绝不碰同目录下的任何其他文件！
         for (const old of filesToDelete) {
           try {
             if (old.b2_path && !newFiles.some(nf => nf.b2_path === old.b2_path)) {
