@@ -968,20 +968,22 @@ export async function onRequest(context) {
             }, e);
             if (!putRs.ok) throw new Error(`写入 B2 存储桶失败: ${await putRs.text()}`);
 
-            // 寻找最贴合的原有旧文件进行原地继承
+            // 寻找最贴合的原有旧文件进行原地继承（严格限定属于本仓库资产，绝不挪用无关文件）
             let matchedOld = null;
             if (rule.lastFiles && rule.lastFiles[i] && !usedOldIds.has(rule.lastFiles[i].id)) {
               matchedOld = rule.lastFiles[i];
             }
             if (!matchedOld) {
+              const repoKeyword = (cleanRepo.split('/')[1] || cleanRepo).toLowerCase();
               const baseKeyword = cleanFileName.replace(/[0-9._-]/g, '').toLowerCase();
-              matchedOld = existingFolderFiles.find(ef => !usedOldIds.has(ef.id) && (
-                ef.name === cleanFileName || 
-                (baseKeyword && ef.name.toLowerCase().includes(baseKeyword))
-              ));
-            }
-            if (!matchedOld) {
-              matchedOld = existingFolderFiles.find(ef => !usedOldIds.has(ef.id));
+              matchedOld = existingFolderFiles.find(ef => {
+                if (usedOldIds.has(ef.id)) return false;
+                const efn = (ef.name || '').toLowerCase();
+                const isSameName = ef.name === cleanFileName;
+                const isSameAsset = baseKeyword.length >= 3 && efn.includes(baseKeyword);
+                const isBelongToRepo = repoKeyword && efn.includes(repoKeyword);
+                return isSameName || (isSameAsset && isBelongToRepo);
+              });
             }
 
             let fileId = '';
@@ -1008,7 +1010,7 @@ export async function onRequest(context) {
           }
         }
 
-        // 追更成功后彻底物理大扫除（清理未被复用的多余旧文件和历史孤儿条目）
+        // 追更成功后，精准清理属于本任务的历史旧版本残留（绝不误伤同目录下的其他无关文件！）
         rule.shareId = rule.shareId || generateShortId(8);
         rule.historyIds = rule.historyIds || [];
         const activeIds = new Set(newFiles.map(f => f.id));
@@ -1024,28 +1026,35 @@ export async function onRequest(context) {
           }
         }
 
-        // 2. 目标文件夹内所有未被本次活跃使用的旧文件，彻底物理清除！
-        try {
-          const { results: folderOrphans } = await e.DB.prepare("SELECT id, name, b2_path, type as bucket FROM files WHERE folder=?").bind(targetFolder).all();
-          if (folderOrphans && folderOrphans.length > 0) {
-            for (const fo of folderOrphans) {
-              if (fo && fo.id && !activeIds.has(fo.id) && !seenDeleteIds.has(fo.id)) {
-                seenDeleteIds.add(fo.id);
-                filesToDelete.push(fo);
+        // 2. 针对直链追更：仅清理同名旧文件（例如多次下载残留的历史重名文件，绝不碰同目录其他文件！）
+        if (isDirectUrl) {
+          for (const nf of newFiles) {
+            try {
+              const { results: dupFiles } = await e.DB.prepare("SELECT id, name, b2_path, type as bucket FROM files WHERE folder=? AND name=?").bind(targetFolder, nf.name).all();
+              if (dupFiles && dupFiles.length > 0) {
+                for (const df of dupFiles) {
+                  if (df && df.id && !activeIds.has(df.id) && !seenDeleteIds.has(df.id)) {
+                    seenDeleteIds.add(df.id);
+                    filesToDelete.push(df);
+                  }
+                }
               }
-            }
+            } catch (_) {}
           }
-        } catch (_) {}
-
-        // 3. 针对直链追更或同名文件，跨所有目录清理重名未使用的孤儿文件
-        for (const nf of newFiles) {
+        } else {
+          // 3. 针对 GitHub 追更：仅清理属于该仓库特征的旧版本文件（按仓库名或包含词识别，绝不误伤其他文件）
+          const repoKeyword = (cleanRepo.split('/')[1] || cleanRepo).toLowerCase();
           try {
-            const { results: dupFiles } = await e.DB.prepare("SELECT id, name, b2_path, type as bucket FROM files WHERE name=?").bind(nf.name).all();
-            if (dupFiles && dupFiles.length > 0) {
-              for (const df of dupFiles) {
-                if (df && df.id && !activeIds.has(df.id) && !seenDeleteIds.has(df.id)) {
-                  seenDeleteIds.add(df.id);
-                  filesToDelete.push(df);
+            const { results: folderFiles } = await e.DB.prepare("SELECT id, name, b2_path, type as bucket FROM files WHERE folder=?").bind(targetFolder).all();
+            if (folderFiles && folderFiles.length > 0) {
+              for (const ff of folderFiles) {
+                if (!ff || !ff.id || activeIds.has(ff.id) || seenDeleteIds.has(ff.id)) continue;
+                const fn = (ff.name || '').toLowerCase();
+                const isBelongToRule = (repoKeyword && fn.includes(repoKeyword)) || 
+                  (incWords.length > 0 && incWords.some(w => fn.includes(w)));
+                if (isBelongToRule) {
+                  seenDeleteIds.add(ff.id);
+                  filesToDelete.push(ff);
                 }
               }
             }
