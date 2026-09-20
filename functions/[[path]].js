@@ -637,7 +637,12 @@ export async function onRequest(context) {
         const rule = rules.find(r => r.id === ruleId);
         if (!rule) return Response.json({ ok: false, error: '未找到该追更任务' }, { headers: { 'Cache-Control': 'no-store' } });
 
-        const rawRepo = (rule.repo || '').trim();
+        let rawRepo = (rule.repo || '').trim();
+        // 自动容错修复缺失冒号或斜杠的协议（如 https//lsposed.zip -> https://lsposed.zip）
+        rawRepo = rawRepo.replace(/^(https?):?\/*(?=[^\/])/i, '$1://');
+        if (!/^https?:\/\//i.test(rawRepo) && !/^[^\/]+\/[^\/]+$/.test(rawRepo) && /\.(zip|com|cn|org|net|xyz|io|top|app|dev|me|cc|info)/i.test(rawRepo)) {
+          rawRepo = 'https://' + rawRepo;
+        }
         const isDirectUrl = /^https?:\/\//i.test(rawRepo) && !/^https?:\/\/github\.com\/[^\/]+\/[^\/]+(?:\/)?$/i.test(rawRepo);
 
         let tagName = '';

@@ -222,6 +222,12 @@ Object.assign(app, {
 
   async saveGithubRule() {
     let repo = (document.getElementById('gh-repo').value || '').trim();
+    // 自动修复缺失冒号或斜杠的协议（如 https//lsposed.zip -> https://lsposed.zip）
+    repo = repo.replace(/^(https?):?\/*(?=[^\/])/i, '$1://');
+    if (!/^https?:\/\//i.test(repo) && !/^[^\/]+\/[^\/]+$/.test(repo) && /\.(zip|com|cn|org|net|xyz|io|top|app|dev|me|cc|info)/i.test(repo)) {
+      repo = 'https://' + repo;
+    }
+
     const isDirect = /^https?:\/\//i.test(repo) && !/^https?:\/\/github\.com\/[^\/]+\/[^\/]+(?:\/)?$/i.test(repo);
     if (!isDirect) {
       repo = repo.replace(/^https?:\/\/github\.com\//, '').replace(/\/$/, '');
