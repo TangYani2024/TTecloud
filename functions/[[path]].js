@@ -665,11 +665,15 @@ export async function onRequest(context) {
 
         if (isDirectUrl) {
           // ================== 模式 A：任意 HTTP/HTTPS 固定直链追更 ==================
+          const fetchHeaders = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': '*/*'
+          };
           let headRes = null;
           try {
             headRes = await fetch(rawRepo, {
               method: 'HEAD',
-              headers: { 'User-Agent': 'Cloudflare-Worker-TangYani-Drive' },
+              headers: fetchHeaders,
               redirect: 'follow'
             });
             if (!headRes.ok || headRes.status === 405 || headRes.status === 403) headRes = null;
@@ -679,14 +683,14 @@ export async function onRequest(context) {
             try {
               headRes = await fetch(rawRepo, {
                 method: 'GET',
-                headers: { 'User-Agent': 'Cloudflare-Worker-TangYani-Drive', 'Range': 'bytes=0-0' },
+                headers: { ...fetchHeaders, 'Range': 'bytes=0-0' },
                 redirect: 'follow'
               });
             } catch (_) {}
           }
 
-          const etag = headRes ? headRes.headers.get('ETag') : null;
-          const lastMod = headRes ? headRes.headers.get('Last-Modified') : null;
+          const etag = headRes ? (headRes.headers.get('ETag') || headRes.headers.get('etag')) : null;
+          const lastMod = headRes ? (headRes.headers.get('Last-Modified') || headRes.headers.get('last-modified')) : null;
           const cl = headRes ? (headRes.headers.get('content-range') ? headRes.headers.get('content-range').split('/')[1] : headRes.headers.get('content-length')) : null;
 
           // 优先 ETag，若无检测 Last-Modified，否则采用方案2 (Content-Length 弱指纹)，最后默认参数兜底
@@ -696,8 +700,11 @@ export async function onRequest(context) {
             tagName = 'mod-' + Math.floor(new Date(lastMod).getTime() / 1000);
           } else if (cl && parseInt(cl) > 0) {
             tagName = 'size-' + cl;
-          } else {
-            tagName = 'sync-' + timeStr.replace(/[- :]/g, '').slice(0, 12);
+          }
+
+          // 如果探测阶段拿到了明确的 ETag/大小/修改时间，且与上一次记录的一致，秒回跳过更新
+          if (!force && tagName && rule.lastTag && rule.lastTag === tagName) {
+            return Response.json({ ok: true, skipped: true, tag: tagName, time: rule.lastUpdatedAt || timeStr, msg: `已是最新版本 (${tagName})，无需更新` }, { headers: { 'Cache-Control': 'no-store' } });
           }
 
           // 提取文件名与默认参数兜底
@@ -726,15 +733,34 @@ export async function onRequest(context) {
             }
           }
 
-          if (!force && rule.lastTag === tagName && rule.lastFiles && rule.lastFiles.length > 0) {
-            return Response.json({ ok: true, skipped: true, tag: tagName, time: rule.lastUpdatedAt || timeStr, msg: `已是最新版本 (${tagName})，无需更新` }, { headers: { 'Cache-Control': 'no-store' } });
-          }
-
           const fileRes = await fetch(rawRepo, {
-            headers: { 'User-Agent': 'Cloudflare-Worker-TangYani-Drive' },
+            headers: fetchHeaders,
             redirect: 'follow'
           });
           if (!fileRes.ok) throw new Error(`拉取直链资源失败 (${fileRes.status})`);
+
+          // 从正式下载响应头中补齐最权威的源站 ETag/大小
+          const realEtag = fileRes.headers.get('ETag') || fileRes.headers.get('etag');
+          const realLastMod = fileRes.headers.get('Last-Modified') || fileRes.headers.get('last-modified');
+          const realCl = fileRes.headers.get('content-length');
+
+          if (realEtag) {
+            tagName = realEtag.replace(/["\s]/g, '').replace(/^W\//, '');
+          } else if (!tagName && realLastMod) {
+            tagName = 'mod-' + Math.floor(new Date(realLastMod).getTime() / 1000);
+          } else if (!tagName && realCl) {
+            tagName = 'size-' + realCl;
+          } else if (!tagName) {
+            tagName = 'sync-' + timeStr.replace(/[- :]/g, '').slice(0, 12);
+          }
+
+          // 重新从正式下载响应头提取真实文件名
+          const realCd = fileRes.headers.get('Content-Disposition') || fileRes.headers.get('content-disposition');
+          if (realCd) {
+            const m = realCd.match(/filename\*?=(?:UTF-8'')?["']?([^"';]+)["']?/i);
+            if (m && m[1]) cleanFileName = decodeURIComponent(m[1].trim()).replace(/^.*[\\\/]/, '').replace(/[:*?"<>|]/g, '_');
+          }
+
           const newBp = Date.now() + '_' + cleanFileName;
           const bk = CONFIG.BUCKETS.RESOURCE;
           const fileSize = parseInt(fileRes.headers.get('content-length')) || 0;
@@ -801,7 +827,7 @@ export async function onRequest(context) {
             return Response.json({ ok: true, skipped: true, tag: tagName, time: rule.lastUpdatedAt || timeStr, msg: `未找到符合正负词过滤的文件 (最新 Release 版本: ${tagName})` }, { headers: { 'Cache-Control': 'no-store' } });
           }
 
-          if (!force && rule.lastTag === tagName && rule.lastFiles && rule.lastFiles.length > 0) {
+          if (!force && tagName && rule.lastTag && rule.lastTag === tagName) {
             return Response.json({ ok: true, skipped: true, tag: tagName, time: rule.lastUpdatedAt || timeStr, msg: `已是最新版本 (${tagName})，无需更新` }, { headers: { 'Cache-Control': 'no-store' } });
           }
 
@@ -838,15 +864,13 @@ export async function onRequest(context) {
           }
         }
 
-        // 追更成功后文件生命周期管理：
-        // 1. 若旧版本已有分享，保持旧链接可用（不立即删除旧版本存储与记录），暂存至 pendingOldFiles
-        // 2. 将新文件暂存至 pendingFiles，等待管理员重新分享/确认激活
-        // 3. 当管理员重新分享或激活新版本时，再替代旧版本并彻底清理原旧文件
+        // 追更成功后彻底清理历史同名旧文件及上代记录（物理删除 S3 存储 + D1 数据库记录）
         rule.shareId = rule.shareId || generateShortId(8);
         const newFileIds = new Set(newFiles.map(f => f.id));
         const filesToDelete = [];
         const seenIds = new Set(newFileIds);
 
+        // 1. 纳入规则记录的历史老文件
         if (rule.lastFiles && Array.isArray(rule.lastFiles)) {
           for (const old of rule.lastFiles) {
             if (old && old.id && !seenIds.has(old.id)) {
@@ -855,7 +879,16 @@ export async function onRequest(context) {
             }
           }
         }
+        if (rule.pendingOldFiles && Array.isArray(rule.pendingOldFiles)) {
+          for (const old of rule.pendingOldFiles) {
+            if (old && old.id && !seenIds.has(old.id)) {
+              seenIds.add(old.id);
+              filesToDelete.push(old);
+            }
+          }
+        }
 
+        // 2. 查同目标目录下、同名的所有旧文件（哪怕之前因为报错残留了多个，全部彻底清理！）
         for (const nf of newFiles) {
           try {
             const { results } = await e.DB.prepare("SELECT id, name, b2_path, type as bucket FROM files WHERE folder=? AND name=?").bind(targetFolder, nf.name).all();
@@ -870,21 +903,24 @@ export async function onRequest(context) {
           } catch (err) {}
         }
 
-        const isFirstSync = !rule.lastFiles || rule.lastFiles.length === 0;
-
-        if (isFirstSync) {
-          // 首次同步直接激活生效
-          rule.lastFiles = newFiles;
-          rule.pendingFiles = [];
-          rule.pendingOldFiles = [];
-          rule.hasUpdateToActivate = false;
-        } else {
-          // 非首次同步：暂留旧版本供未重新分享的老用户继续访问，新版本等待激活替代
-          rule.pendingFiles = newFiles;
-          rule.pendingOldFiles = filesToDelete;
-          rule.hasUpdateToActivate = true;
+        // 3. 真正执行物理删除：清理 S3 对象存储与 D1 数据库记录！
+        for (const old of filesToDelete) {
+          try {
+            if (old.b2_path) {
+              await awsS3Fetch(CONFIG.S3_ENDPOINT + '/' + (old.bucket || CONFIG.BUCKETS.RESOURCE) + '/' + encodeURIComponent(old.b2_path), { method: 'DELETE' }, e);
+            }
+            if (old.id) {
+              await e.DB.prepare("DELETE FROM files WHERE id=?").bind(old.id).run();
+            }
+          } catch (err) {}
         }
 
+        const isFirstSync = !rule.lastFiles || rule.lastFiles.length === 0;
+
+        rule.lastFiles = newFiles;
+        rule.pendingFiles = [];
+        rule.pendingOldFiles = [];
+        rule.hasUpdateToActivate = false;
         rule.lastTag = tagName;
         rule.lastUpdatedAt = timeStr;
 
@@ -904,10 +940,10 @@ export async function onRequest(context) {
           time: timeStr,
           files: newFiles.map(f => f.name),
           shareId: rule.shareId,
-          hasUpdateToActivate: rule.hasUpdateToActivate,
+          hasUpdateToActivate: false,
           msg: isFirstSync
             ? `成功同步 ${cleanRepo} (${tagName})，共 ${newFiles.length} 个文件`
-            : `成功拉取 ${cleanRepo} (${tagName}) 新版本！旧版本分享链接仍可用，待您点击“激活并替代”后正式交接。`
+            : `成功更新 ${cleanRepo} (${tagName})，已清理旧版本残留文件！`
         }, {
           headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' }
         });
