@@ -124,10 +124,16 @@ Object.assign(app, {
       h += `<div class="gh-rule-card" id="gh-card-${rule.id}">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
           <div style="font-weight:bold;font-size:15px;word-break:break-all">
-            <a href="https://github.com/${this.escapeHTML(rule.repo)}" target="_blank" style="color:var(--primary);text-decoration:none;display:inline-flex;align-items:center;gap:4px">
-              ${this.escapeHTML(rule.repo)}
-              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-            </a>
+            ${/^https?:\/\//i.test(rule.repo) && !rule.repo.includes('github.com')
+              ? `<a href="${this.escapeHTML(rule.repo)}" target="_blank" style="color:var(--primary);text-decoration:none;display:inline-flex;align-items:center;gap:4px">
+                  🌐 ${this.escapeHTML(rule.repo)}
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                </a>`
+              : `<a href="https://github.com/${this.escapeHTML(rule.repo)}" target="_blank" style="color:var(--primary);text-decoration:none;display:inline-flex;align-items:center;gap:4px">
+                  ${this.escapeHTML(rule.repo)}
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                </a>`
+            }
           </div>
           <span class="gh-badge gh-badge-tag">${this.escapeHTML(lastTag)}</span>
         </div>
@@ -216,10 +222,24 @@ Object.assign(app, {
 
   async saveGithubRule() {
     let repo = (document.getElementById('gh-repo').value || '').trim();
-    repo = repo.replace(/^https?:\/\/github\.com\//, '').replace(/\/$/, '');
-    if (!repo || !repo.includes('/')) return alert('请输入有效的 GitHub 仓库，例如: topjohnwu/Magisk');
+    const isDirect = /^https?:\/\//i.test(repo) && !/^https?:\/\/github\.com\/[^\/]+\/[^\/]+(?:\/)?$/i.test(repo);
+    if (!isDirect) {
+      repo = repo.replace(/^https?:\/\/github\.com\//, '').replace(/\/$/, '');
+      if (!repo || !repo.includes('/')) return alert('请输入有效的 GitHub 仓库 (如: topjohnwu/Magisk) 或 http/https 文件下载直链');
+    }
 
-    const folder = (document.getElementById('gh-folder').value || '').trim() || repo.split('/')[1] || repo;
+    let folder = (document.getElementById('gh-folder').value || '').trim();
+    if (!folder) {
+      if (isDirect) {
+        try {
+          folder = new URL(repo).hostname.replace(/[^a-zA-Z0-9_\u4e00-\u9fa5]/g, '_');
+        } catch (_) {
+          folder = '直链追更';
+        }
+      } else {
+        folder = repo.split('/')[1] || repo;
+      }
+    }
     const include = (document.getElementById('gh-include').value || '').trim();
     const exclude = (document.getElementById('gh-exclude').value || '').trim();
     const ruleId = document.getElementById('gh-rule-id').value;
@@ -299,8 +319,9 @@ Object.assign(app, {
     const upEl = document.getElementById('uploadProgress');
     if (upEl) upEl.style.display = 'block';
 
-    const cleanRepo = rule.repo.trim().replace(/^https?:\/\/github\.com\//, '').replace(/\/$/, '');
-    document.getElementById('uploadStatus').innerHTML = `<img class="om-emoji" src="/openmoji/1F50D.svg" alt="🔍"> 正在检查 [${this.escapeHTML(cleanRepo)}] 最新 Release...`;
+    const isDirect = /^https?:\/\//i.test(rule.repo) && !rule.repo.includes('github.com');
+    const cleanRepo = isDirect ? rule.repo : rule.repo.trim().replace(/^https?:\/\/github\.com\//, '').replace(/\/$/, '');
+    document.getElementById('uploadStatus').innerHTML = `<img class="om-emoji" src="/openmoji/1F50D.svg" alt="🔍"> 正在检查 [${this.escapeHTML(cleanRepo)}] 最新更新...`;
     document.getElementById('uploadPercent').innerText = '1 / 1';
     document.getElementById('uploadProgressBar').style.width = '30%';
 

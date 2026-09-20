@@ -293,13 +293,15 @@
         </div>
         <input type="hidden" id="gh-rule-id">
         <div>
-          <label style="font-size:12px;font-weight:bold;color:var(--tx);display:block;margin-bottom:6px">GitHub 仓库</label>
-          <input type="text" id="gh-repo" placeholder="例如: topjohnwu/Magisk 或粘贴完整 GitHub 地址" style="margin:0;padding:11px 12px;font-size:13px">
-          <div style="font-size:11px;color:gray;margin-top:4px">支持 owner/repo 格式或完整 GitHub 链接</div>
+          <label style="font-size:12px;font-weight:bold;color:var(--tx);display:block;margin-bottom:6px">GitHub 仓库 或 目标文件下载直链</label>
+          <input type="text" id="gh-repo" placeholder="例如: topjohnwu/Magisk 或 https://example.com/app-latest.apk" style="margin:0;padding:11px 12px;font-size:13px">
+          <div style="font-size:11px;color:gray;margin-top:4px;line-height:1.5">
+            💡 支持 <b style="color:var(--tx)">owner/repo</b> 仓库，或直接输入 <b style="color:var(--primary)">http/https 固定下载直链</b>（系统将自动嗅探 ETag/大小并打标追更）。
+          </div>
         </div>
         <div>
-          <label style="font-size:12px;font-weight:bold;color:var(--tx);display:block;margin-bottom:6px">保存至网盘目录</label>
-          <input type="text" id="gh-folder" placeholder="例如: Magisk (留空默认使用仓库名)" style="margin:0;padding:11px 12px;font-size:13px">
+          <label style="font-size:12px;font-weight:bold;color:var(--tx);display:block;margin-bottom:6px">保存至网盘目录 (选填)</label>
+          <input type="text" id="gh-folder" placeholder="留空默认使用仓库名或直链域名" style="margin:0;padding:11px 12px;font-size:13px">
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
           <div>
@@ -325,11 +327,11 @@
     </div>
   </div>
 
-  <script src="/js/icons.js?v=5.6"></script>
-  <script src="/js/app.js?v=5.6"></script>
-  <script src="/js/download.js?v=5.6"></script>
-  <script src="/js/upload.js?v=5.6"></script>
-  <script src="/js/github.js?v=5.6"></script>
-  <script src="/js/admin.js?v=5.6"></script>
+  <script src="/js/icons.js?v=5.7"></script>
+  <script src="/js/app.js?v=5.7"></script>
+  <script src="/js/download.js?v=5.7"></script>
+  <script src="/js/upload.js?v=5.7"></script>
+  <script src="/js/github.js?v=5.7"></script>
+  <script src="/js/admin.js?v=5.7"></script>
 </body>
 </html>

@@ -447,13 +447,23 @@ export async function onRequest(context) {
     });
   }
 
-  // 4. 分享链接页面 (支持文件ID与追更规则8位固定ID)
+  // 4. 分享链接页面 (支持文件ID与追更规则8位固定ID，并在手动分享/访问老UUID时自动升级为8位短ID)
   if (P.startsWith('/share/')) {
     const rawId = P.split('/')[2];
     let fileObj = null;
     let { results: R } = await e.DB.prepare("SELECT * FROM files WHERE id=?").bind(rawId).all();
     if (R.length) {
       fileObj = R[0];
+      // 手动访问或分享老文件时：若仍是老 UUID(>8位)，自动替换为8位安全短ID并废除老UUID
+      if (fileObj.id && fileObj.id.length > 8) {
+        const newShortId = generateShortId(8);
+        try {
+          await e.DB.prepare("UPDATE files SET id=? WHERE id=?").bind(newShortId, fileObj.id).run();
+          const targetUrl = new URL(req.url);
+          targetUrl.pathname = '/share/' + newShortId;
+          return Response.redirect(targetUrl.toString(), 302);
+        } catch (err) {}
+      }
     } else {
       const cfgData = await getSiteConfig(e, false);
       const rules = cfgData.githubSyncRules || [];
@@ -627,86 +637,96 @@ export async function onRequest(context) {
         const rule = rules.find(r => r.id === ruleId);
         if (!rule) return Response.json({ ok: false, error: '未找到该追更任务' }, { headers: { 'Cache-Control': 'no-store' } });
 
-        const cleanRepo = rule.repo.trim().replace(/^https?:\/\/github\.com\//, '').replace(/\/$/, '');
-        if (!cleanRepo || !cleanRepo.includes('/')) return Response.json({ ok: false, error: 'GitHub 仓库格式不正确 (例: owner/repo)' }, { headers: { 'Cache-Control': 'no-store' } });
+        const rawRepo = (rule.repo || '').trim();
+        const isDirectUrl = /^https?:\/\//i.test(rawRepo) && !/^https?:\/\/github\.com\/[^\/]+\/[^\/]+(?:\/)?$/i.test(rawRepo);
 
-        const ghHeaders = {
-          'User-Agent': 'Cloudflare-Worker-TangYani-Drive',
-          'Accept': 'application/vnd.github.v3+json'
-        };
-        const ghToken = (e.GITHUB_TOKEN || e.GH_TOKEN || '').trim();
-        if (ghToken) {
-          ghHeaders['Authorization'] = `Bearer ${ghToken}`;
-        }
-
-        const ghRes = await fetch(`https://api.github.com/repos/${cleanRepo}/releases/latest`, {
-          headers: ghHeaders
-        });
-        if (!ghRes.ok) {
-          const errTxt = await ghRes.text();
-          if (ghRes.status === 403 && !ghToken) {
-            return Response.json({ ok: false, error: 'GitHub 匿名 IP 限频，请在 Cloudflare 环境变量中添加 GITHUB_TOKEN' }, { headers: { 'Cache-Control': 'no-store' } });
-          }
-          if (ghRes.status === 401) {
-            return Response.json({ ok: false, error: 'Cloudflare 环境变量 GITHUB_TOKEN 无效或过期' }, { headers: { 'Cache-Control': 'no-store' } });
-          }
-          return Response.json({ ok: false, error: `GitHub API 错误 (${ghRes.status}): ${errTxt.slice(0, 100)}` }, { headers: { 'Cache-Control': 'no-store' } });
-        }
-
-        const rel = await ghRes.json();
-        const tagName = rel.tag_name || '';
-        const assets = rel.assets || [];
-
-        const incWords = (rule.include || '').split(/[,，\s]+/).map(s => s.trim().toLowerCase()).filter(Boolean);
-        const excWords = (rule.exclude || '').split(/[,，\s]+/).map(s => s.trim().toLowerCase()).filter(Boolean);
-
-        const matchedAssets = assets.filter(a => {
-          const fn = (a.name || '').toLowerCase();
-          if (incWords.length > 0 && !incWords.some(w => fn.includes(w))) return false;
-          if (excWords.length > 0 && excWords.some(w => fn.includes(w))) return false;
-          return true;
-        });
-
+        let tagName = '';
+        let targetFolder = '';
+        let newFiles = [];
         const now = new Date();
         const pad = n => String(n).padStart(2, '0');
         const timeStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
 
-        if (matchedAssets.length === 0) {
-          return Response.json({ ok: true, skipped: true, tag: tagName, time: rule.lastUpdatedAt || timeStr, msg: `未找到符合正负词过滤的文件 (最新 Release 版本: ${tagName})` }, { headers: { 'Cache-Control': 'no-store' } });
-        }
+        if (isDirectUrl) {
+          // ================== 模式 A：任意 HTTP/HTTPS 固定直链追更 ==================
+          let headRes = null;
+          try {
+            headRes = await fetch(rawRepo, {
+              method: 'HEAD',
+              headers: { 'User-Agent': 'Cloudflare-Worker-TangYani-Drive' },
+              redirect: 'follow'
+            });
+            if (!headRes.ok || headRes.status === 405 || headRes.status === 403) headRes = null;
+          } catch (_) {}
 
-        if (!force && rule.lastTag === tagName && rule.lastFiles && rule.lastFiles.length > 0) {
-          if (!rule.lastUpdatedAt) {
-            rule.lastUpdatedAt = timeStr;
-            globalSiteConfig = cfgData;
-            globalConfigTime = Date.now();
-            await awsS3Fetch(CONFIG.S3_ENDPOINT + '/' + CONFIG.BUCKETS.RESOURCE + '/' + encodeURIComponent(bp), {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(cfgData)
-            }, e);
+          if (!headRes) {
+            try {
+              headRes = await fetch(rawRepo, {
+                method: 'GET',
+                headers: { 'User-Agent': 'Cloudflare-Worker-TangYani-Drive', 'Range': 'bytes=0-0' },
+                redirect: 'follow'
+              });
+            } catch (_) {}
           }
-          return Response.json({ ok: true, skipped: true, tag: tagName, time: rule.lastUpdatedAt || timeStr, msg: `已是最新版本 (${tagName})，无需更新` }, { headers: { 'Cache-Control': 'no-store' } });
-        }
 
-        const targetFolder = (rule.folder || cleanRepo.split('/')[1] || cleanRepo).trim();
-        let newFiles = [];
+          const etag = headRes ? headRes.headers.get('ETag') : null;
+          const lastMod = headRes ? headRes.headers.get('Last-Modified') : null;
+          const cl = headRes ? (headRes.headers.get('content-range') ? headRes.headers.get('content-range').split('/')[1] : headRes.headers.get('content-length')) : null;
 
-        for (const asset of matchedAssets) {
-          const fileRes = await fetch(asset.browser_download_url, {
+          // 优先 ETag，若无检测 Last-Modified，否则采用方案2 (Content-Length 弱指纹)，最后默认参数兜底
+          if (etag) {
+            tagName = etag.replace(/["\s]/g, '').replace(/^W\//, '');
+          } else if (lastMod) {
+            tagName = 'mod-' + Math.floor(new Date(lastMod).getTime() / 1000);
+          } else if (cl && parseInt(cl) > 0) {
+            tagName = 'size-' + cl;
+          } else {
+            tagName = 'sync-' + timeStr.replace(/[- :]/g, '').slice(0, 12);
+          }
+
+          // 提取文件名与默认参数兜底
+          let cleanFileName = '';
+          const cd = headRes ? headRes.headers.get('Content-Disposition') : '';
+          if (cd) {
+            const m = cd.match(/filename\*?=(?:UTF-8'')?["']?([^"';]+)["']?/i);
+            if (m && m[1]) cleanFileName = decodeURIComponent(m[1].trim());
+          }
+          if (!cleanFileName) {
+            try {
+              const p = new URL(rawRepo).pathname;
+              const lastPart = p.split('/').filter(Boolean).pop();
+              if (lastPart && lastPart.includes('.')) cleanFileName = decodeURIComponent(lastPart);
+            } catch (_) {}
+          }
+          if (!cleanFileName) cleanFileName = 'direct_file_' + Date.now() + '.bin';
+          cleanFileName = cleanFileName.replace(/^.*[\\\/]/, '').replace(/[:*?"<>|]/g, '_');
+
+          targetFolder = (rule.folder || '').trim();
+          if (!targetFolder) {
+            try {
+              targetFolder = new URL(rawRepo).hostname.replace(/[^a-zA-Z0-9_\u4e00-\u9fa5]/g, '_');
+            } catch (_) {
+              targetFolder = '直链追更';
+            }
+          }
+
+          if (!force && rule.lastTag === tagName && rule.lastFiles && rule.lastFiles.length > 0) {
+            return Response.json({ ok: true, skipped: true, tag: tagName, time: rule.lastUpdatedAt || timeStr, msg: `已是最新版本 (${tagName})，无需更新` }, { headers: { 'Cache-Control': 'no-store' } });
+          }
+
+          const fileRes = await fetch(rawRepo, {
             headers: { 'User-Agent': 'Cloudflare-Worker-TangYani-Drive' },
             redirect: 'follow'
           });
-          if (!fileRes.ok) throw new Error(`拉取资源 ${asset.name} 失败 (${fileRes.status})`);
-
-          const cleanFileName = asset.name.replace(/^.*[\\\/]/, '').replace(/[:*?"<>|]/g, '_');
+          if (!fileRes.ok) throw new Error(`拉取直链资源失败 (${fileRes.status})`);
           const newBp = Date.now() + '_' + cleanFileName;
           const bk = CONFIG.BUCKETS.RESOURCE;
+          const fileSize = parseInt(fileRes.headers.get('content-length')) || 0;
           const putHeaders = {
-            'Content-Type': asset.content_type || 'application/octet-stream',
+            'Content-Type': fileRes.headers.get('content-type') || 'application/octet-stream',
             'x-amz-content-sha256': 'UNSIGNED-PAYLOAD'
           };
-          if (asset.size) putHeaders['Content-Length'] = String(asset.size);
+          if (fileSize) putHeaders['Content-Length'] = String(fileSize);
 
           const putRs = await awsS3Fetch(CONFIG.S3_ENDPOINT + '/' + bk + '/' + encodeURIComponent(newBp), {
             method: 'PUT',
@@ -717,9 +737,90 @@ export async function onRequest(context) {
 
           const fileId = generateShortId(8);
           await e.DB.prepare("INSERT INTO files (id,name,b2_path,type,size,folder) VALUES (?,?,?,?,?,?)")
-            .bind(fileId, cleanFileName, newBp, bk, asset.size || 0, targetFolder)
+            .bind(fileId, cleanFileName, newBp, bk, fileSize, targetFolder)
             .run();
           newFiles.push({ id: fileId, name: cleanFileName, b2_path: newBp, bucket: bk });
+        } else {
+          // ================== 模式 B：GitHub Release 追更 ==================
+          const cleanRepo = rawRepo.replace(/^https?:\/\/github\.com\//, '').replace(/\/$/, '');
+          if (!cleanRepo || !cleanRepo.includes('/')) return Response.json({ ok: false, error: 'GitHub 仓库格式不正确 (例: owner/repo) 或无效直链' }, { headers: { 'Cache-Control': 'no-store' } });
+
+          const ghHeaders = {
+            'User-Agent': 'Cloudflare-Worker-TangYani-Drive',
+            'Accept': 'application/vnd.github.v3+json'
+          };
+          const ghToken = (e.GITHUB_TOKEN || e.GH_TOKEN || '').trim();
+          if (ghToken) {
+            ghHeaders['Authorization'] = `Bearer ${ghToken}`;
+          }
+
+          const ghRes = await fetch(`https://api.github.com/repos/${cleanRepo}/releases/latest`, {
+            headers: ghHeaders
+          });
+          if (!ghRes.ok) {
+            const errTxt = await ghRes.text();
+            if (ghRes.status === 403 && !ghToken) {
+              return Response.json({ ok: false, error: 'GitHub 匿名 IP 限频，请在 Cloudflare 环境变量中添加 GITHUB_TOKEN' }, { headers: { 'Cache-Control': 'no-store' } });
+            }
+            if (ghRes.status === 401) {
+              return Response.json({ ok: false, error: 'Cloudflare 环境变量 GITHUB_TOKEN 无效或过期' }, { headers: { 'Cache-Control': 'no-store' } });
+            }
+            return Response.json({ ok: false, error: `GitHub API 错误 (${ghRes.status}): ${errTxt.slice(0, 100)}` }, { headers: { 'Cache-Control': 'no-store' } });
+          }
+
+          const rel = await ghRes.json();
+          tagName = rel.tag_name || '';
+          const assets = rel.assets || [];
+
+          const incWords = (rule.include || '').split(/[,，\s]+/).map(s => s.trim().toLowerCase()).filter(Boolean);
+          const excWords = (rule.exclude || '').split(/[,，\s]+/).map(s => s.trim().toLowerCase()).filter(Boolean);
+
+          const matchedAssets = assets.filter(a => {
+            const fn = (a.name || '').toLowerCase();
+            if (incWords.length > 0 && !incWords.some(w => fn.includes(w))) return false;
+            if (excWords.length > 0 && excWords.some(w => fn.includes(w))) return false;
+            return true;
+          });
+
+          if (matchedAssets.length === 0) {
+            return Response.json({ ok: true, skipped: true, tag: tagName, time: rule.lastUpdatedAt || timeStr, msg: `未找到符合正负词过滤的文件 (最新 Release 版本: ${tagName})` }, { headers: { 'Cache-Control': 'no-store' } });
+          }
+
+          if (!force && rule.lastTag === tagName && rule.lastFiles && rule.lastFiles.length > 0) {
+            return Response.json({ ok: true, skipped: true, tag: tagName, time: rule.lastUpdatedAt || timeStr, msg: `已是最新版本 (${tagName})，无需更新` }, { headers: { 'Cache-Control': 'no-store' } });
+          }
+
+          targetFolder = (rule.folder || cleanRepo.split('/')[1] || cleanRepo).trim();
+
+          for (const asset of matchedAssets) {
+            const fileRes = await fetch(asset.browser_download_url, {
+              headers: { 'User-Agent': 'Cloudflare-Worker-TangYani-Drive' },
+              redirect: 'follow'
+            });
+            if (!fileRes.ok) throw new Error(`拉取资源 ${asset.name} 失败 (${fileRes.status})`);
+
+            const cleanFileName = asset.name.replace(/^.*[\\\/]/, '').replace(/[:*?"<>|]/g, '_');
+            const newBp = Date.now() + '_' + cleanFileName;
+            const bk = CONFIG.BUCKETS.RESOURCE;
+            const putHeaders = {
+              'Content-Type': asset.content_type || 'application/octet-stream',
+              'x-amz-content-sha256': 'UNSIGNED-PAYLOAD'
+            };
+            if (asset.size) putHeaders['Content-Length'] = String(asset.size);
+
+            const putRs = await awsS3Fetch(CONFIG.S3_ENDPOINT + '/' + bk + '/' + encodeURIComponent(newBp), {
+              method: 'PUT',
+              headers: putHeaders,
+              body: fileRes.body
+            }, e);
+            if (!putRs.ok) throw new Error(`写入 B2 存储桶失败: ${await putRs.text()}`);
+
+            const fileId = generateShortId(8);
+            await e.DB.prepare("INSERT INTO files (id,name,b2_path,type,size,folder) VALUES (?,?,?,?,?,?)")
+              .bind(fileId, cleanFileName, newBp, bk, asset.size || 0, targetFolder)
+              .run();
+            newFiles.push({ id: fileId, name: cleanFileName, b2_path: newBp, bucket: bk });
+          }
         }
 
         // 追更成功后文件生命周期管理：
