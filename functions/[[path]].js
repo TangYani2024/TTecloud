@@ -1360,20 +1360,10 @@ export async function onRequest(context) {
               });
             }
 
-            // 补充没有任何文件的空目录 meta
-            for (const [fName, pwd] of metaMap.entries()) {
-              if (fName && !folderStats[fName]) {
-                folderStats[fName] = {
-                  name: fName,
-                  count: 0,
-                  size: 0,
-                  locked: !!pwd,
-                  unlocked: folderUnlockedMap[fName] ?? true
-                };
-              }
-            }
-
-            const folderList = Object.values(folderStats).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+            // 仅保留真实包含文件的有效文件夹（过滤掉0项的空目录）
+            const folderList = Object.values(folderStats)
+              .filter(f => f.count > 0)
+              .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
             return Response.json({
               isAdmin: iA,

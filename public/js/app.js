@@ -525,19 +525,19 @@ const app = {
 
     // 场景 3：根目录模式（展示文件夹列表，并自动从本地 allFiles 计算最新统计）
     const folderMap = new Map();
-    // 先塞入已知的文件夹 meta
+    // 预先载入已知文件夹 meta（未解锁加密目录保留其后台统计 count/size）
     (this.state.folderList || []).forEach(f => {
       if (f.name) {
         folderMap.set(f.name, {
           name: f.name,
-          count: 0,
-          size: 0,
+          count: f.unlocked === false ? (f.count || 0) : 0,
+          size: f.unlocked === false ? (f.size || 0) : 0,
           locked: !!f.locked,
           unlocked: !!f.unlocked
         });
       }
     });
-    // 动态累加 allFiles 中的各文件
+    // 动态累加本地 allFiles 中的各文件
     (this.state.allFiles || []).forEach(f => {
       const fn = (f.folder || '').trim();
       if (fn) {
@@ -550,7 +550,10 @@ const app = {
       }
     });
 
-    const computedFolders = Array.from(folderMap.values()).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    // 严格过滤掉 0 项的空文件夹，只保留包含真实文件的有效目录！
+    const computedFolders = Array.from(folderMap.values())
+      .filter(f => f.count > 0)
+      .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
     this.state.folderList = computedFolders;
     this.renderFolders(computedFolders);
   },
