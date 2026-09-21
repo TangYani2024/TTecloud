@@ -1197,6 +1197,11 @@ export async function onRequest(context) {
           } catch (err) {}
         }
 
+        // 自动物理清理空文件夹孤儿元数据记录
+        try {
+          await e.DB.prepare("DELETE FROM folder_meta WHERE name NOT IN (SELECT DISTINCT folder FROM files WHERE folder IS NOT NULL AND TRIM(folder) != '')").run();
+        } catch (_) {}
+
         const isFirstSync = !rule.lastFiles || rule.lastFiles.length === 0;
 
         rule.lastFiles = newFiles;
@@ -1304,6 +1309,11 @@ export async function onRequest(context) {
           }
           const isAllMode = U.searchParams.get('all') === '1' || (!hasFolder && !q);
           if (isAllMode) {
+            // 自动物理清理孤儿空目录元数据（没有任何文件但残留了密码记录的文件夹）
+            try {
+              await e.DB.prepare("DELETE FROM folder_meta WHERE name NOT IN (SELECT DISTINCT folder FROM files WHERE folder IS NOT NULL AND TRIM(folder) != '')").run();
+            } catch (_) {}
+
             // 全量元数据模式：一次性获取所有可见文件及目录统计信息，支撑前端0延迟即时切片与搜索
             const { results: allMeta } = await e.DB.prepare("SELECT name, password FROM folder_meta").all();
             const metaMap = new Map((allMeta || []).map(m => [m.name, m.password]));
@@ -1474,7 +1484,16 @@ export async function onRequest(context) {
         const p = await req.json();
         if (['delete', 'sync_d1_ghosts', 'sync_b2_orphans', 'clean_garbled', 'sync_b2_to_d1'].includes(p.action)) globalLastSizeCalcTime = 0;
         if (p.action === 'rename') await e.DB.prepare("UPDATE files SET name=? WHERE id=?").bind(p.name, p.id).run();
-        if (p.action === 'move') await e.DB.prepare("UPDATE files SET folder=? WHERE id=?").bind(p.folder ?? '', p.id).run();
+        if (p.action === 'move') {
+          const oldFile = await e.DB.prepare("SELECT folder FROM files WHERE id=?").bind(p.id).first();
+          await e.DB.prepare("UPDATE files SET folder=? WHERE id=?").bind(p.folder ?? '', p.id).run();
+          if (oldFile && oldFile.folder && oldFile.folder.trim()) {
+            const remain = await e.DB.prepare("SELECT COUNT(*) as c FROM files WHERE folder=?").bind(oldFile.folder).first();
+            if (!remain || remain.c === 0) {
+              await e.DB.prepare("DELETE FROM folder_meta WHERE name=?").bind(oldFile.folder).run();
+            }
+          }
+        }
         if (p.action === 'toggle_hide') await e.DB.prepare("UPDATE files SET is_hidden=CASE WHEN is_hidden=1 THEN 0 ELSE 1 END WHERE id=?").bind(p.id).run();
         if (p.action === 'lock_folder') {
           const fName = (p.folder === null || p.folder === undefined) ? '' : String(p.folder);
@@ -1482,10 +1501,16 @@ export async function onRequest(context) {
           else await e.DB.prepare("INSERT OR REPLACE INTO folder_meta (name, password) VALUES (?, ?)").bind(fName, p.password).run();
         }
         if (p.action === 'delete') {
-          const f = await e.DB.prepare("SELECT b2_path, type FROM files WHERE id=?").bind(p.id).first();
+          const f = await e.DB.prepare("SELECT b2_path, type, folder FROM files WHERE id=?").bind(p.id).first();
           if (f) {
             await awsS3Fetch(CONFIG.S3_ENDPOINT + '/' + f.type + '/' + encodeURIComponent(f.b2_path), { method: 'DELETE' }, e);
             await e.DB.prepare("DELETE FROM files WHERE id=?").bind(p.id).run();
+            if (f.folder && f.folder.trim()) {
+              const remain = await e.DB.prepare("SELECT COUNT(*) as c FROM files WHERE folder=?").bind(f.folder).first();
+              if (!remain || remain.c === 0) {
+                await e.DB.prepare("DELETE FROM folder_meta WHERE name=?").bind(f.folder).run();
+              }
+            }
           }
         }
         if (['sync_d1_ghosts', 'sync_b2_orphans', 'sync_b2_to_d1'].includes(p.action)) {
@@ -1525,6 +1550,9 @@ export async function onRequest(context) {
                 dc++;
               }
             }
+            try {
+              await e.DB.prepare("DELETE FROM folder_meta WHERE name NOT IN (SELECT DISTINCT folder FROM files WHERE folder IS NOT NULL AND TRIM(folder) != '')").run();
+            } catch (_) {}
             return Response.json({ ok: true, msg: '清理了 ' + dc + ' 个死链！' });
           }
           if (p.action === 'sync_b2_orphans') {
