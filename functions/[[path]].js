@@ -1302,18 +1302,91 @@ export async function onRequest(context) {
             globalCachedTotalSize = (await e.DB.prepare("SELECT SUM(size) as t FROM files WHERE b2_path NOT LIKE '.sys/%' AND b2_path NOT LIKE '%__site_config__%'").first())?.t || 0;
             globalLastSizeCalcTime = Date.now();
           }
-          if (!hasFolder && !q) {
-            const { results: R } = await e.DB.prepare("SELECT f.folder, COUNT(f.id) as count, SUM(f.size) as size, m.password FROM files f LEFT JOIN folder_meta m ON f.folder = m.name WHERE f.type=? AND f.b2_path NOT LIKE '.sys/%' AND f.b2_path NOT LIKE '%__site_config__%' " + (iA ? '' : 'AND f.is_hidden=0') + " GROUP BY f.folder ORDER BY f.folder ASC").bind(bk).all();
+          const isAllMode = U.searchParams.get('all') === '1' || (!hasFolder && !q);
+          if (isAllMode) {
+            // 全量元数据模式：一次性获取所有可见文件及目录统计信息，支撑前端0延迟即时切片与搜索
+            const { results: allMeta } = await e.DB.prepare("SELECT name, password FROM folder_meta").all();
+            const metaMap = new Map((allMeta || []).map(m => [m.name, m.password]));
+
+            const { results: allFiles } = await e.DB.prepare(
+              "SELECT id, name, size, folder, is_hidden, upload_at, sync_rule_id FROM files WHERE type=? AND b2_path NOT LIKE '.sys/%' AND b2_path NOT LIKE '%__site_config__%' " +
+              (iA ? '' : 'AND is_hidden=0') +
+              " ORDER BY upload_at DESC"
+            ).bind(bk).all();
+
+            let fF = [];
+            let folderStats = {};
+            let folderUnlockedMap = {};
+
+            // 校验各加密目录解锁状态
+            for (const [fName, pwd] of metaMap.entries()) {
+              if (iA || !pwd) {
+                folderUnlockedMap[fName] = true;
+              } else {
+                const hash = await hashSha256(fName);
+                const lM = C.match(new RegExp('(?:^|; )lock_' + hash + '=([^;]*)'));
+                folderUnlockedMap[fName] = !!(lM && decodeURIComponent(lM[1]) === pwd);
+              }
+            }
+
+            for (const f of (allFiles || [])) {
+              const fKey = f.folder || '';
+              if (fKey) {
+                if (!folderStats[fKey]) {
+                  folderStats[fKey] = {
+                    name: fKey,
+                    count: 0,
+                    size: 0,
+                    locked: !!metaMap.get(fKey),
+                    unlocked: folderUnlockedMap[fKey] ?? true
+                  };
+                }
+                folderStats[fKey].count++;
+                folderStats[fKey].size += (f.size || 0);
+              }
+
+              // 安全过滤：若未解锁加密目录，具体文件明细不直接下发
+              if (!iA && fKey && metaMap.get(fKey) && !folderUnlockedMap[fKey]) {
+                continue;
+              }
+              fF.push({
+                id: f.id,
+                name: f.name,
+                size: f.size,
+                folder: f.folder || '',
+                is_hidden: f.is_hidden,
+                upload_at: f.upload_at,
+                sync_rule_id: f.sync_rule_id || ''
+              });
+            }
+
+            // 补充没有任何文件的空目录 meta
+            for (const [fName, pwd] of metaMap.entries()) {
+              if (fName && !folderStats[fName]) {
+                folderStats[fName] = {
+                  name: fName,
+                  count: 0,
+                  size: 0,
+                  locked: !!pwd,
+                  unlocked: folderUnlockedMap[fName] ?? true
+                };
+              }
+            }
+
+            const folderList = Object.values(folderStats).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+
             return Response.json({
               isAdmin: iA,
               hasImage: HAS_IMAGE,
               siteTitle: CONFIG.SITE_TITLE,
               totalSize: globalCachedTotalSize,
               maxSize: CONFIG.MAX_STORAGE_BYTES,
-              mode: 'folders',
-              data: (R || []).map(r => ({ name: r.folder ?? '', count: r.count, size: r.size, locked: !!r.password }))
+              mode: 'all',
+              data: fF,
+              folders: folderList
             }, { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
           }
+
           let qry = "SELECT f.*, m.password FROM files f LEFT JOIN folder_meta m ON f.folder = m.name WHERE f.type=? AND f.b2_path NOT LIKE '.sys/%' AND f.b2_path NOT LIKE '%__site_config__%' " + (iA ? '' : 'AND f.is_hidden=0'), prm = [bk];
           if (hasFolder) {
             if (!tF || !tF.trim()) {

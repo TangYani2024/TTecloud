@@ -167,7 +167,7 @@ Object.assign(app, {
         }
         document.getElementById('file-name-display').innerHTML = '<img class="om-emoji" src="/openmoji/2795.svg" alt="➕"> 点击选择多文件，或直接拖拽文件夹到此处';
         document.getElementById('queue-info').innerText = '完美支持多文件、多级文件夹拖拽识别并发';
-        this.fetchData();
+        this.fetchData(true);
       }, failed > 0 ? 5000 : 2000);
     }
     this.isUploading = false;

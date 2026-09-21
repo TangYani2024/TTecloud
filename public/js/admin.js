@@ -16,6 +16,24 @@ Object.assign(app, {
     if (a === 'sync_b2_orphans' && !confirm('极度危险！会永久删除B2中未记录的文件！确定？')) return;
     if (a === 'sync_b2_to_d1' && !confirm('将B2中的游离文件同步到D1的[B2直传同步]目录？')) return;
 
+    // ================= 乐观更新 (Optimistic UI) =================
+    let rollbackData = null;
+    if (a === 'delete') {
+      rollbackData = this.removeFileLocally(i);
+      this.toast('🗑️ 已删除文件');
+    } else if (a === 'rename') {
+      rollbackData = this.updateFileLocally(i, { name: rq.name });
+      this.toast('✏️ 已重命名为: ' + rq.name);
+    } else if (a === 'move') {
+      rollbackData = this.updateFileLocally(i, { folder: rq.folder });
+      this.toast('✂️ 已移动到目录: ' + (rq.folder || '根目录'));
+    } else if (a === 'toggle_hide') {
+      const curFile = (this.state.allFiles || []).find(f => f.id === i);
+      const newHidden = curFile ? (curFile.is_hidden ? 0 : 1) : 1;
+      rollbackData = this.updateFileLocally(i, { is_hidden: newHidden });
+      this.toast(newHidden ? '🔒 文件已设为隐藏' : '👁️ 文件已设为公开');
+    }
+
     try {
       const r = await fetch('/api/admin/action', {
         method: 'POST',
@@ -23,10 +41,24 @@ Object.assign(app, {
         body: JSON.stringify(rq)
       });
       const rs = await r.json();
-      if (rs.msg) alert(rs.msg);
-      this.fetchData();
+      if (!r.ok || rs.error) {
+        throw new Error(rs.error || '云端同步失败');
+      }
+      if (rs.msg && a.startsWith('sync_')) {
+        alert(rs.msg);
+        this.fetchData(true);
+      }
     } catch (e) {
-      alert('操作失败');
+      alert('操作失败: ' + (e.message || e));
+      // 异常时原地回滚
+      if (rollbackData) {
+        if (a === 'delete') {
+          this.state.allFiles.push(rollbackData);
+        } else {
+          this.updateFileLocally(i, rollbackData);
+        }
+        this.renderCurrentView();
+      }
     }
   },
 
@@ -35,12 +67,22 @@ Object.assign(app, {
     const displayName = fName.trim() || '空白目录';
     const p = prompt('目录[' + displayName + ']密码(留空清除)：');
     if (p === null) return;
-    await fetch('/api/admin/action', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'lock_folder', folder: fName, password: p })
-    });
-    this.fetchData();
+    try {
+      const r = await fetch('/api/admin/action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'lock_folder', folder: fName, password: p })
+      });
+      const rs = await r.json();
+      if (!r.ok || rs.error) throw new Error(rs.error || '设置失败');
+      // 就地更新 folderList 锁定状态
+      const targetFolder = (this.state.folderList || []).find(x => x.name === fName);
+      if (targetFolder) targetFolder.locked = !!p;
+      this.toast(p ? '🔐 目录已加密' : '🔓 目录已取消加密');
+      this.renderCurrentView();
+    } catch (e) {
+      alert('操作失败: ' + (e.message || e));
+    }
   },
 
   switchUploadMode(m) {

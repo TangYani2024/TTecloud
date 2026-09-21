@@ -6,7 +6,11 @@ const app = {
     isAdmin: false,
     hasImage: (window.__CFG__ && window.__CFG__.hasImageBucket !== undefined) ? !!window.__CFG__.hasImageBucket : true,
     currentPwd: '',
-    fileList: []
+    fileList: [],
+    folderList: [],
+    allFiles: [],
+    dataLoaded: false,
+    unlockedFolders: new Set()
   },
   configLoaded: false,
   settings: {
@@ -324,6 +328,7 @@ const app = {
   parseHash() {
     const h = window.location.hash.slice(1);
     const p = new URLSearchParams(h);
+    const prevView = this.state.view;
     this.state.view = p.get('view') || 'resource';
     if (!this.state.hasImage && this.state.view === 'image') {
       this.state.view = 'resource';
@@ -340,7 +345,13 @@ const app = {
       b.classList.toggle('active', b.id === 'tab-' + this.state.view);
     });
     this.updInd('ind-main', document.getElementById('tab-' + this.state.view));
-    this.fetchData();
+
+    // 若大分类切换或尚未加载过全量数据，拉取全量；否则直接 0 毫秒本地瞬间切片渲染！
+    if (prevView !== this.state.view || !this.state.dataLoaded) {
+      this.fetchData();
+    } else {
+      this.renderCurrentView();
+    }
   },
 
   setHash() {
@@ -355,6 +366,8 @@ const app = {
     this.state.folder = null;
     this.state.q = '';
     this.state.currentPwd = '';
+    this.state.dataLoaded = false;
+    this.state.allFiles = [];
     document.querySelectorAll('#main-nav .nav-tab').forEach(b => {
       b.classList.toggle('active', b.id === 'tab-' + v);
     });
@@ -367,63 +380,289 @@ const app = {
   goHome() {
     this.state.folder = null;
     this.state.currentPwd = '';
+    this.state.q = '';
+    const searchInput = document.getElementById('search-input');
+    if (searchInput) searchInput.value = '';
     this.setHash();
+    this.renderCurrentView();
   },
 
-  goToFolder(f, l) {
+  async goToFolder(f, l) {
     const folderName = (f === null || f === undefined) ? '' : String(f);
-    if (!this.state.isAdmin && l) {
+    const isLocked = !!l;
+    
+    // 若是非管理员且目录加密且尚未解锁，输入密码解锁
+    if (!this.state.isAdmin && isLocked && !this.state.unlockedFolders.has(folderName)) {
       const displayName = folderName.trim() || '空白目录';
       const p = prompt('🔒 加密目录[' + displayName + ']密码：');
       if (!p) return;
-      fetch('/api/unlock', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ folder: folderName, password: p })
-      })
-      .then(r => r.json())
-      .then(rs => {
-        if (rs.ok) {
-          this.state.folder = folderName;
-          this.state.currentPwd = p;
-          this.setHash();
-        } else {
-          alert(rs.error);
+      try {
+        const unlockRes = await fetch('/api/unlock', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ folder: folderName, password: p })
+        });
+        const rs = await unlockRes.json();
+        if (!rs.ok) {
+          alert(rs.error || '密码错误');
+          return;
         }
-      });
-      return;
+        this.state.unlockedFolders.add(folderName);
+        this.state.currentPwd = p;
+
+        // 解锁后，按需拉取该加密目录的完整文件数据合并到 allFiles 中
+        const r = await fetch('/api/data?view=' + this.state.view + '&folder=' + encodeURIComponent(folderName));
+        if (r.ok) {
+          const dataJson = await r.json();
+          const newFolderFiles = dataJson.data || [];
+          const existingIds = new Set(this.state.allFiles.map(x => x.id));
+          for (const item of newFolderFiles) {
+            if (!existingIds.has(item.id)) {
+              this.state.allFiles.push(item);
+            }
+          }
+        }
+      } catch (err) {
+        alert('解锁通信失败');
+        return;
+      }
     }
+
     this.state.folder = folderName;
-    this.state.currentPwd = '';
+    this.state.q = '';
+    const searchInput = document.getElementById('search-input');
+    if (searchInput) searchInput.value = '';
     this.setHash();
+    // 0 毫秒纯本地极速渲染，彻底告别加载等待！
+    this.renderCurrentView();
   },
 
   debounceSearch() {
     clearTimeout(this.st);
     this.st = setTimeout(() => {
-      this.state.q = document.getElementById('search-input').value.trim();
+      const val = document.getElementById('search-input').value.trim();
+      this.state.q = val;
       this.setHash();
-    }, 400);
+      this.renderCurrentView();
+    }, 50); // 从 400ms 缩减到 50ms，随打随出！
   },
 
-  async fetchData() {
+  showTopProgressBar() {
+    let b = document.getElementById('top-loading-bar');
+    if (!b) {
+      b = document.createElement('div');
+      b.id = 'top-loading-bar';
+      b.className = 'top-loading-bar';
+      document.body.appendChild(b);
+    }
+    b.style.width = '35%';
+    b.style.opacity = '1';
+  },
+
+  hideTopProgressBar() {
+    const b = document.getElementById('top-loading-bar');
+    if (b) {
+      b.style.width = '100%';
+      setTimeout(() => {
+        b.style.opacity = '0';
+        setTimeout(() => { b.style.width = '0%'; }, 300);
+      }, 200);
+    }
+  },
+
+  updateStorageUI() {
+    const total = this.state.totalSize || 0;
+    const max = this.state.maxSize || 0;
+    const p = max > 0 ? Math.min((total / max) * 100, 100).toFixed(1) : 0;
+    const stEl = document.getElementById('storage-text');
+    if (stEl) stEl.innerText = this.formatBytes(total) + ' / ' + this.formatBytes(max) + ' (' + p + '%)';
+    const sb = document.getElementById('storage-bar');
+    if (sb) {
+      sb.style.width = p + '%';
+      sb.style.background = p > 90 ? '#ef4444' : p > 75 ? '#f59e0b' : '';
+    }
+  },
+
+  // 纯前端 0 延迟即时切片渲染器
+  renderCurrentView() {
+    const inFolder = this.state.folder !== null;
+    const q = (this.state.q || '').trim().toLowerCase();
+
+    // 更新面包屑与导航控制
+    const btnBack = document.getElementById('btn-back');
+    if (btnBack) btnBack.style.display = inFolder ? 'inline-flex' : 'none';
+    const folderDisplayName = inFolder ? (this.state.folder.trim() || '空白目录') : '根目录';
+    const breadcrumb = document.getElementById('breadcrumb');
+    if (breadcrumb) {
+      if (q) {
+        breadcrumb.innerHTML = '<img class="om-emoji" src="/openmoji/1F50D.svg" alt="🔍"> 搜索: ' + this.escapeHTML(this.state.q);
+      } else {
+        breadcrumb.innerHTML = inFolder 
+          ? '<img class="om-emoji" src="/openmoji/1F4C2.svg" alt="📂"> ' + this.escapeHTML(folderDisplayName) 
+          : '<img class="om-emoji" src="/openmoji/1F4C1.svg" alt="📁"> 根目录';
+      }
+    }
+
+    // 场景 1：搜索模式（全局或目录内）
+    if (q) {
+      const scopeFiles = inFolder 
+        ? (this.state.allFiles || []).filter(f => (f.folder || '') === this.state.folder)
+        : (this.state.allFiles || []);
+      const matched = scopeFiles.filter(f => (f.name || '').toLowerCase().includes(q));
+      this.state.fileList = matched;
+      this.renderFiles(matched);
+      return;
+    }
+
+    // 场景 2：子目录模式（0毫秒秒开！）
+    if (inFolder) {
+      const currentFolder = this.state.folder;
+      const matched = (this.state.allFiles || []).filter(f => (f.folder || '') === currentFolder);
+      this.state.fileList = matched;
+      this.renderFiles(matched);
+      return;
+    }
+
+    // 场景 3：根目录模式（展示文件夹列表，并自动从本地 allFiles 计算最新统计）
+    const folderMap = new Map();
+    // 先塞入已知的文件夹 meta
+    (this.state.folderList || []).forEach(f => {
+      if (f.name) {
+        folderMap.set(f.name, {
+          name: f.name,
+          count: 0,
+          size: 0,
+          locked: !!f.locked,
+          unlocked: !!f.unlocked
+        });
+      }
+    });
+    // 动态累加 allFiles 中的各文件
+    (this.state.allFiles || []).forEach(f => {
+      const fn = (f.folder || '').trim();
+      if (fn) {
+        if (!folderMap.has(fn)) {
+          folderMap.set(fn, { name: fn, count: 0, size: 0, locked: false, unlocked: true });
+        }
+        const item = folderMap.get(fn);
+        item.count++;
+        item.size += (Number(f.size) || 0);
+      }
+    });
+
+    const computedFolders = Array.from(folderMap.values()).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    this.state.folderList = computedFolders;
+    this.renderFolders(computedFolders);
+  },
+
+  // 乐观更新方法：就地删除文件（平滑缩起淡出）
+  removeFileLocally(fileId) {
+    const idx = (this.state.allFiles || []).findIndex(f => f.id === fileId);
+    if (idx === -1) return null;
+    const removedFile = this.state.allFiles[idx];
+    this.state.allFiles.splice(idx, 1);
+
+    // 动态扣减存储容量条
+    if (this.state.totalSize && removedFile.size) {
+      this.state.totalSize = Math.max(0, this.state.totalSize - Number(removedFile.size));
+      this.updateStorageUI();
+    }
+
+    // 找到卡片执行淡出缩起动画
+    const card = document.querySelector(`.file-card[data-id="${fileId}"]`);
+    if (card) {
+      card.style.transition = 'all 0.28s cubic-bezier(0.4, 0, 0.2, 1)';
+      card.style.opacity = '0';
+      card.style.transform = 'scale(0.85)';
+      card.style.pointerEvents = 'none';
+      setTimeout(() => {
+        card.remove();
+        const container = document.querySelector('.grid-view');
+        if (container && container.children.length === 0) {
+          this.renderCurrentView();
+        }
+      }, 280);
+    }
+    return removedFile;
+  },
+
+  // 乐观更新方法：就地更新文件属性（重命名、显隐、移动）
+  updateFileLocally(fileId, patch) {
+    const file = (this.state.allFiles || []).find(f => f.id === fileId);
+    if (!file) return null;
+    const oldSnapshot = Object.assign({}, file);
+    Object.assign(file, patch);
+
+    const card = document.querySelector(`.file-card[data-id="${fileId}"]`);
+    if (card) {
+      if (patch.name !== undefined) {
+        const nameEl = card.querySelector('.file-name');
+        if (nameEl) {
+          nameEl.innerText = patch.name;
+          nameEl.title = patch.name;
+        }
+        const ext = (patch.name.split('.').pop() || '').toLowerCase();
+        const sp = (this.state.view === 'image' || ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'ico'].includes(ext));
+        const prevEl = card.querySelector('.file-preview');
+        if (prevEl && !sp) {
+          prevEl.className = 'file-preview';
+          prevEl.innerHTML = this.getFileIconSvg(patch.name);
+        }
+      }
+      if (patch.is_hidden !== undefined) {
+        card.style.opacity = patch.is_hidden ? '0.6' : '1';
+        let hb = card.querySelector('div[style*="background:rgba(239,68,68"]');
+        if (patch.is_hidden && !hb) {
+          const b = document.createElement('div');
+          b.style.cssText = 'position:absolute;top:6px;right:6px;font-size:10px;background:rgba(239,68,68,0.8);color:#fff;padding:2px 6px;border-radius:6px;font-weight:bold;box-shadow:0 2px 5px rgba(0,0,0,0.2)';
+          b.innerText = '隐藏';
+          card.prepend(b);
+        } else if (!patch.is_hidden && hb) {
+          hb.remove();
+        }
+      }
+      if (patch.folder !== undefined && patch.folder !== this.state.folder) {
+        card.style.transition = 'all 0.28s cubic-bezier(0.4, 0, 0.2, 1)';
+        card.style.opacity = '0';
+        card.style.transform = 'translateX(20px)';
+        setTimeout(() => {
+          card.remove();
+          const container = document.querySelector('.grid-view');
+          if (container && container.children.length === 0) {
+            this.renderCurrentView();
+          }
+        }, 280);
+      }
+    }
+    return oldSnapshot;
+  },
+
+  async fetchData(silent = false) {
     const a = document.getElementById('dynamic-area');
     if (!a) return;
-    a.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;padding:60px 0;color:var(--primary);"><svg width="48" height="48" viewBox="0 0 50 50" style="animation:spin 2s linear infinite;"><circle cx="25" cy="25" r="20" fill="none" stroke="var(--cd)" stroke-width="4"></circle><circle cx="25" cy="25" r="20" fill="none" stroke="var(--primary)" stroke-width="4" stroke-linecap="round" stroke-dasharray="90 150" style="animation:dash 1.5s ease-in-out infinite;"></circle></svg><div style="margin-top:15px;font-size:13px;font-weight:bold;letter-spacing:1px;animation:pulse 1.5s ease-in-out infinite;">核心引擎跃迁中...</div></div>';
     
+    // 只有在完全没有数据且非静默时，才显示首次初始化占位；其余情况永不清屏白屏！
+    if (!silent && (!this.state.allFiles || this.state.allFiles.length === 0)) {
+      this.showTopProgressBar();
+      a.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;padding:60px 0;color:var(--primary);"><svg width="48" height="48" viewBox="0 0 50 50" style="animation:spin 2s linear infinite;"><circle cx="25" cy="25" r="20" fill="none" stroke="var(--cd)" stroke-width="4"></circle><circle cx="25" cy="25" r="20" fill="none" stroke="var(--primary)" stroke-width="4" stroke-linecap="round" stroke-dasharray="90 150" style="animation:dash 1.5s ease-in-out infinite;"></circle></svg><div style="margin-top:15px;font-size:13px;font-weight:bold;letter-spacing:1px;animation:pulse 1.5s ease-in-out infinite;">全量索引准备中...</div></div>';
+    } else {
+      this.showTopProgressBar();
+    }
+
     try {
-      let u = '/api/data?view=' + this.state.view;
-      if (this.state.folder !== null) u += '&folder=' + encodeURIComponent(this.state.folder);
-      if (this.state.q) u += '&q=' + encodeURIComponent(this.state.q);
-      
+      // 开启 all=1 全量元数据预取模式
+      const u = '/api/data?view=' + this.state.view + '&all=1';
       const r = await fetch(u);
       if (r.status === 401) {
         alert('权限验证失败，或管理员状态已失效');
         this.goHome();
+        this.hideTopProgressBar();
         return;
       }
       
       const rs = await r.json();
+      this.hideTopProgressBar();
+
       if (!r.ok) {
         throw new Error(rs.error || ('网络/接口异常 (' + r.status + ')'));
       }
@@ -453,24 +692,16 @@ const app = {
           ? '<a href="/logout" class="btn btn-sm btn-outline">退出</a>' 
           : '<a href="/login" class="btn btn-sm btn-outline">管理登录</a>';
       }
-      
-      const inFolder = this.state.folder !== null;
+
       document.getElementById('main-nav').style.display = (rs.isAdmin && this.state.hasImage) ? 'flex' : 'none';
       const fab = document.getElementById('admin-fab-container');
       if (fab) fab.style.display = rs.isAdmin ? 'flex' : 'none';
-      document.getElementById('btn-back').style.display = inFolder ? 'inline-flex' : 'none';
-      const folderDisplayName = inFolder ? (this.state.folder.trim() || '空白目录') : '根目录';
-      document.getElementById('breadcrumb').innerHTML = inFolder 
-        ? '<img class="om-emoji" src="/openmoji/1F4C2.svg" alt="📂"> ' + this.escapeHTML(folderDisplayName) 
-        : '<img class="om-emoji" src="/openmoji/1F4C1.svg" alt="📁"> 根目录';
-      
+
       if (rs.isAdmin) {
         document.getElementById('storage-card').style.display = 'block';
-        const p = rs.maxSize > 0 ? Math.min((rs.totalSize / rs.maxSize) * 100, 100).toFixed(1) : 0;
-        document.getElementById('storage-text').innerText = this.formatBytes(rs.totalSize) + ' / ' + this.formatBytes(rs.maxSize) + ' (' + p + '%)';
-        const sb = document.getElementById('storage-bar');
-        sb.style.width = p + '%';
-        sb.style.background = p > 90 ? '#ef4444' : p > 75 ? '#f59e0b' : '';
+        this.state.totalSize = rs.totalSize || 0;
+        this.state.maxSize = rs.maxSize || 0;
+        this.updateStorageUI();
         
         setTimeout(() => {
           this.updInd('ind-main', document.querySelector('#main-nav .active'));
@@ -489,24 +720,25 @@ const app = {
           '<div style="font-size:36px;margin-bottom:10px;">⚠️</div>' +
           '<h3 style="margin:0 0 10px;color:#ef4444;font-size:16px;">数据库未就绪</h3>' +
           '<div style="font-size:13px;color:var(--tx);line-height:1.6;margin-bottom:16px;font-weight:bold;">' + this.escapeHTML(rs.error) + '</div>' +
-          '<div style="font-size:12px;color:gray;text-align:left;background:rgba(0,0,0,0.03);padding:14px 18px;border-radius:12px;line-height:1.7;">' +
-          '<b>🛠️ 请按以下步骤完成初始化：</b><br>' +
-          '1. <b>执行建表 SQL</b>：在 Cloudflare 控制台 -&gt; <b>D1 SQL 数据库</b> -&gt; 选择您的数据库 -&gt; 点击 <b>控制台 (Console)</b>，将项目中的 <code>schema.sql</code> 全部内容粘贴进去执行；<br>' +
-          '2. <b>绑定 D1 变量</b>：在 Pages 项目 -&gt; <b>设置</b> -&gt; <b>函数</b> -&gt; <b>D1 数据库绑定</b>，变量名称填写 <code>DB</code>；<br>' +
-          '3. <b>重新部署生效</b>：前往 Pages 项目的<b>【部署 (Deployments)】</b>页面，点击最新记录右侧的 <code>...</code> -&gt; <b>【重试部署 (Retry deployment)】</b>。' +
-          '</div>' +
           '</div>';
         return;
       }
       
-      this.state.fileList = rs.data || [];
-      if (rs.mode === 'folders') {
-        this.state.folderList = rs.data || [];
-      }
-      if (rs.mode === 'folders') this.renderFolders(rs.data);
-      else this.renderFiles(rs.data);
+      // 全量持久化至内存，并标记已就绪
+      this.state.allFiles = rs.data || [];
+      this.state.folderList = rs.folders || [];
+      this.state.dataLoaded = true;
+
+      // 纯本地极速计算并渲染！
+      this.renderCurrentView();
     } catch (e) {
+      this.hideTopProgressBar();
       console.error('fetchData error:', e);
+      if (this.state.allFiles && this.state.allFiles.length > 0) {
+        this.toast('⚠️ 无法同步云端，正在使用本地离线数据');
+        this.renderCurrentView();
+        return;
+      }
       const authBtn = document.getElementById('auth-btn');
       if (authBtn && !authBtn.innerHTML.trim()) {
         authBtn.innerHTML = '<a href="/login" class="btn btn-sm btn-outline">管理登录</a>';
@@ -517,7 +749,7 @@ const app = {
           '<div style="font-size:36px;margin-bottom:10px;">⚠️</div>' +
           '<h3 style="margin:0 0 10px;color:#ef4444;font-size:16px;">数据加载异常</h3>' +
           '<div style="font-size:13px;color:var(--tx);margin-bottom:12px;">' + this.escapeHTML(e.message || e) + '</div>' +
-          '<div style="font-size:12px;color:gray;">如已绑定 D1 或更新代码，请尝试按 <b>Ctrl+F5</b> 强制刷新浏览器缓存，并确认 Pages 已重试部署。</div>' +
+          '<button class="btn btn-primary btn-sm" onclick="app.fetchData()"><img class="om-emoji" src="/openmoji/1F504.svg" alt="🔄"> 重新加载</button>' +
           '</div>';
       }
     }
